@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BookOpen, Play, Volume2, VolumeX } from 'lucide-react';
 import { SITE_PROFILES } from '../data/nasaScienceData';
 import type { DifficultyMode, OutpostSite, SpaceWeatherSnapshot } from '../types/game';
@@ -14,15 +15,18 @@ interface TitleScreenProps {
   onToggleMute: () => void;
 }
 
-const SITE_HOOK: Record<OutpostSite, string> = {
-  moon: 'No air · High solar power, fast 2.6s Earth link',
-  mars: 'Dust storms dim sunlight · 14m Earth radio delay',
-  europa: '4% sunlight · Intense Jupiter radiation, 86m delay',
+const AVATAR_SRC = '/src/assets/images/astronaut_commander_avatar_1794738052744.jpg';
+
+const SITE_STORY_HOOK: Record<OutpostSite, string> = {
+  moon: 'Sol 214, Shackleton Ridge: A sudden storm threatens Maya’s lunar solar wings.',
+  mars: 'Sol 214, Jezero Crater: Dust storms & a 14m Earth delay test Maya’s grit.',
+  europa: 'Sol 214, Conamara Ice: 4% sunlight & Jupiter radiation belts await Maya.',
 };
 
 export function TitleScreen({
   site,
   difficulty,
+  weather,
   muted,
   onSelectSite,
   onSelectDifficulty,
@@ -30,6 +34,7 @@ export function TitleScreen({
   onOpenGuide,
   onToggleMute,
 }: TitleScreenProps) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const siteTitle = site === 'moon' ? 'Moon' : site === 'mars' ? 'Mars' : 'Europa';
 
   return (
@@ -60,7 +65,10 @@ export function TitleScreen({
               Outpost Horizon
             </h1>
             <p className="text-[11px] text-amber-300 font-semibold mt-1 truncate">
-              7-Sol Survival Mission
+              Commander Maya ·{' '}
+              {weather.sourceMode === 'live'
+                ? `Live Solar ${weather.latestFlareClass}`
+                : `NASA ${weather.latestFlareClass}`}
             </p>
           </div>
         </div>
@@ -86,8 +94,24 @@ export function TitleScreen({
         </div>
       </div>
 
-      {/* Minimal Bottom Game Launch Sheet leaving 65%+ 3D scene open */}
-      <div className="bg-gradient-to-t from-[#070B16] via-[#070B16]/92 to-transparent px-4 pt-8 pb-4 space-y-2.5 pointer-events-auto">
+      {/* Minimal Bottom Story Launch Sheet leaving 60%+ 3D scene open */}
+      <div className="bg-gradient-to-t from-[#070B16] via-[#070B16]/94 to-transparent px-4 pt-8 pb-4 space-y-2.5 pointer-events-auto">
+        {/* Astronaut Commander Story Hook */}
+        <div className="flex items-center gap-2.5 bg-[#0F172A]/95 border border-slate-700/80 rounded-xl px-3 py-2">
+          {!avatarFailed ? (
+            <img
+              src={AVATAR_SRC}
+              alt="Commander Maya"
+              referrerPolicy="no-referrer"
+              onError={() => setAvatarFailed(true)}
+              className="w-10 h-10 rounded-lg object-cover shrink-0 border border-amber-400/60"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-lg bg-slate-800 border border-amber-400/60 shrink-0" />
+          )}
+          <p className="text-xs text-slate-200 leading-snug">{SITE_STORY_HOOK[site]}</p>
+        </div>
+
         {/* World Selector Tabs */}
         <div className="grid grid-cols-3 gap-2">
           {(['moon', 'mars', 'europa'] as const).map((key) => {
@@ -97,7 +121,7 @@ export function TitleScreen({
                 key={key}
                 type="button"
                 onClick={() => onSelectSite(key)}
-                className={`min-h-[46px] px-2 py-2 rounded-xl border text-center transition-colors cursor-pointer ${
+                className={`min-h-[44px] px-2 py-1.5 rounded-xl border text-center transition-colors cursor-pointer ${
                   active
                     ? 'bg-[#16243D] border-amber-400 text-white shadow-md'
                     : 'bg-[#0F172A]/90 border-slate-700 text-slate-300 hover:border-slate-500'
@@ -113,8 +137,6 @@ export function TitleScreen({
             );
           })}
         </div>
-
-        <p className="text-[11px] text-slate-300 text-center truncate">{SITE_HOOK[site]}</p>
 
         {/* Difficulty + Big Play CTA */}
         <div className="flex items-center gap-2">
@@ -146,10 +168,10 @@ export function TitleScreen({
           <button
             type="button"
             onClick={onStart}
-            className="flex-1 min-h-[50px] px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-base flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 whitespace-nowrap cursor-pointer"
+            className="flex-1 min-h-[50px] px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 whitespace-nowrap cursor-pointer"
           >
             <Play className="w-4 h-4 fill-slate-950" aria-hidden="true" />
-            <span>Play {siteTitle}</span>
+            <span>Start {siteTitle} Story</span>
           </button>
         </div>
       </div>

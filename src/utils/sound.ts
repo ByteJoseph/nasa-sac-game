@@ -92,6 +92,10 @@ class SoundEngine {
     this.playTone(310, 0.22, 'triangle', 0.07, 0, 240);
     this.playTone(220, 0.35, 'triangle', 0.07, 0.2, 140);
   }
+
+  public playCountdownTick(urgent: boolean): void {
+    this.playTone(urgent ? 880 : 620, 0.06, 'sine', urgent ? 0.06 : 0.035);
+  }
 }
 
 export const soundEngine = new SoundEngine();

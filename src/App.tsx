@@ -3,8 +3,7 @@ import {
   Activity,
   ArrowRight,
   BookOpen,
-  ChevronDown,
-  ChevronUp,
+  Clock,
   FlaskConical,
   Minus,
   Pause,
@@ -23,7 +22,13 @@ import { MissionEndModal } from './components/MissionEndModal';
 import { NasaGuideModal } from './components/NasaGuideModal';
 import { OutpostCanvas3D, type PulseEvent } from './components/OutpostCanvas3D';
 import { TitleScreen } from './components/TitleScreen';
-import { buildSolForecast, pickDilemmaForSol, SITE_PROFILES } from './data/nasaScienceData';
+import { buildSolForecast, SITE_PROFILES } from './data/nasaScienceData';
+import {
+  buildStoryChapterDilemma,
+  INITIAL_STORY_MEMORY,
+  MISSION_START_SOL,
+  type StoryMemory,
+} from './data/storyChapters';
 import {
   applyDeltas,
   calculatePowerAllocationDeltas,
@@ -46,6 +51,8 @@ import type {
   SpaceWeatherSnapshot,
 } from './types/game';
 import { soundEngine } from './utils/sound';
+
+const MAYA_AVATAR = '/src/assets/images/astronaut_commander_avatar_1794738052744.jpg';
 
 const DEFAULT_WEATHER: SpaceWeatherSnapshot = {
   sourceMode: 'curated-archive',
@@ -94,20 +101,20 @@ const MODULE_INFO: Record<
     dotClass: 'bg-cyan-400',
   },
   greenhouse: {
-    name: 'Hydroponic Farm',
+    name: 'Farm Dome',
     shortName: 'Farm',
     colorHex: 0x34d399,
     dotClass: 'bg-emerald-400',
   },
   shield: {
-    name: 'Radiation Shield',
+    name: 'Shield',
     shortName: 'Shield',
     colorHex: 0xfbbf24,
     dotClass: 'bg-amber-400',
   },
   lab: {
-    name: 'Rover & Comms Lab',
-    shortName: 'Lab',
+    name: 'Rover Lab',
+    shortName: 'Rover',
     colorHex: 0x818cf8,
     dotClass: 'bg-indigo-400',
   },
@@ -117,7 +124,7 @@ function formatDelta(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
-function getModuleEffectSummary(
+function getKidEffectLine(
   key: ModuleKey,
   level: number,
   site: OutpostSite,
@@ -130,29 +137,27 @@ function getModuleEffectSummary(
         : site === 'europa'
           ? [0, 11, 20, 28][level]
           : [0, 9, 17, 25][level];
-    return level === 0 ? 'Off · Crew air drops faster' : `Produces +${gain}% Oxygen`;
+    return level === 0 ? 'Off · Air drops' : `Fresh Air +${gain}%`;
   }
   if (key === 'greenhouse') {
     const gain = [0, 8, 16, 23][level];
-    if (level === 0) return 'Off · Pantry drains faster';
-    return level >= 2 ? `Grows +${gain}% Food & +2% O₂` : `Grows +${gain}% Food`;
+    return level === 0 ? 'Off · Food drops' : `Food +${gain}%`;
   }
   if (key === 'shield') {
     const pct = [10, 45, 78, 94][level];
-    const danger = radiationMsv >= 18 ? ' (Storm Today!)' : '';
-    return `Blocks ${pct}% radiation${danger}`;
+    return radiationMsv >= 18 ? `Blocks ${pct}% · Storm!` : `Blocks ${pct}% rays`;
   }
   const sci = (site === 'europa' ? [0, 12, 22, 30] : [0, 11, 20, 28])[level];
-  return level === 0 ? 'Parked · Saves airlock Oxygen' : `+${sci}% Science · uses -${level * 2}% O₂`;
+  return level === 0 ? 'Parked' : `Science +${sci}%`;
 }
 
 function getDeltaChips(deltas: ResourceDeltas): Array<{ label: string; positive: boolean }> {
   const entries: Array<{ key: keyof ResourceDeltas; name: string }> = [
-    { key: 'power', name: 'Pwr' },
-    { key: 'oxygen', name: 'O₂' },
+    { key: 'power', name: 'Power' },
+    { key: 'oxygen', name: 'Air' },
     { key: 'food', name: 'Food' },
-    { key: 'health', name: 'Hlth' },
-    { key: 'science', name: 'Sci' },
+    { key: 'health', name: 'Health' },
+    { key: 'science', name: 'Science' },
   ];
   return entries
     .filter((e) => deltas[e.key] !== 0)
@@ -164,23 +169,24 @@ function getDeltaChips(deltas: ResourceDeltas): Array<{ label: string; positive:
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('TITLE_MENU');
-  const [site, setSite] = useState<OutpostSite>('mars');
+  const [site, setSite] = useState<OutpostSite>('moon');
   const [difficulty, setDifficulty] = useState<DifficultyMode>('cadet');
   const [weather, setWeather] = useState<SpaceWeatherSnapshot>(DEFAULT_WEATHER);
   const [guideOpen, setGuideOpen] = useState(false);
   const [muted, setMuted] = useState(false);
-  const [deckCollapsed, setDeckCollapsed] = useState(false);
+  const [mayaAvatarFailed, setMayaAvatarFailed] = useState(false);
 
-  // Active Mission State
+  // Active Story State
   const [sol, setSol] = useState(1);
   const [phase, setPhase] = useState<SolPhase>('ALLOCATE_POWER');
   const [selectedModule, setSelectedModule] = useState<ModuleKey>('scrubber');
   const [pulseEvent, setPulseEvent] = useState<PulseEvent | null>(null);
+  const [panelsRetracted, setPanelsRetracted] = useState(false);
+  const [storyMemory, setStoryMemory] = useState<StoryMemory>(INITIAL_STORY_MEMORY);
   const [resources, setResources] = useState<CoreResources>(() =>
-    getInitialResources('mars', 'cadet')
+    getInitialResources('moon', 'cadet')
   );
   const [allocation, setAllocation] = useState<ModuleAllocation>(INITIAL_ALLOCATION);
-  const [usedDilemmaIds, setUsedDilemmaIds] = useState<string[]>([]);
   const [activeDilemma, setActiveDilemma] = useState<DilemmaCard | null>(null);
   const [chosenOption, setChosenOption] = useState<DilemmaOption | null>(null);
   const [outcomeNotes, setOutcomeNotes] = useState<string[]>([]);
@@ -189,8 +195,10 @@ export default function App() {
   const [logs, setLogs] = useState<SolLogEntry[]>([]);
   const [failureReason, setFailureReason] = useState('');
   const [commsSecondsLeft, setCommsSecondsLeft] = useState(0);
+  const [urgentSecondsLeft, setUrgentSecondsLeft] = useState<number | null>(null);
 
   const simTimerRef = useRef<number | null>(null);
+  const displaySol = MISSION_START_SOL + sol - 1;
 
   const clearSimTimer = useCallback(() => {
     if (simTimerRef.current !== null) {
@@ -201,7 +209,7 @@ export default function App() {
 
   useEffect(() => clearSimTimer, [clearSimTimer]);
 
-  // Fetch live space weather on mount (falls back honestly to curated NASA archive)
+  // Fetch live space weather on mount
   useEffect(() => {
     let active = true;
     fetch('/api/nasa-weather')
@@ -232,6 +240,7 @@ export default function App() {
   const remainingSolarBars = Math.max(0, forecast.solarBudget - usedPowerUnits);
   const overdrivenBars = Math.max(0, usedPowerUnits - forecast.solarBudget);
 
+  // Light-time comms countdown ticker
   useEffect(() => {
     if (screen !== 'PLAYING' || phase !== 'SOL_DILEMMA' || !activeDilemma?.requiresCommsDelay) {
       return;
@@ -266,7 +275,8 @@ export default function App() {
       setSol(1);
       setPhase('ALLOCATE_POWER');
       setSelectedModule('scrubber');
-      setDeckCollapsed(false);
+      setPanelsRetracted(false);
+      setStoryMemory(INITIAL_STORY_MEMORY);
       setResources(getInitialResources(targetSite, targetDiff));
       setAllocation({
         scrubber: 2,
@@ -274,7 +284,6 @@ export default function App() {
         shield: 1,
         lab: 1,
       });
-      setUsedDilemmaIds([]);
       setActiveDilemma(null);
       setChosenOption(null);
       setOutcomeNotes([]);
@@ -282,6 +291,7 @@ export default function App() {
       setSimPopups([]);
       setLogs([]);
       setFailureReason('');
+      setUrgentSecondsLeft(null);
       setScreen('PLAYING');
       soundEngine.playSolLaunch();
     },
@@ -333,10 +343,10 @@ export default function App() {
 
   const checkFailure = useCallback((nextRes: CoreResources): string | null => {
     if (nextRes.health <= 0) {
-      return 'Crew Health dropped to 0% from radiation or life-support stress. Mission Control ordered an emergency evacuation.';
+      return 'Commander Maya’s health dropped to 0%. Mission Control ordered an emergency evacuation.';
     }
     if (nextRes.oxygen <= 0 && nextRes.power <= 0) {
-      return 'Both Power and Oxygen were exhausted simultaneously, forcing an emergency abort.';
+      return 'Both Power and Air hit 0%, forcing Maya into an emergency capsule abort.';
     }
     return null;
   }, []);
@@ -349,7 +359,6 @@ export default function App() {
     setOutcomeNotes(secondaryNotes);
     setSimPopups(getDeltaChips(predictedPowerDeltas));
     setPhase('SIMULATING_SOL');
-    setDeckCollapsed(false);
     soundEngine.playSolLaunch();
 
     clearSimTimer();
@@ -363,13 +372,13 @@ export default function App() {
         return;
       }
 
-      const dilemma = pickDilemmaForSol(sol, site, forecast, usedDilemmaIds);
-      setActiveDilemma(dilemma);
-      setUsedDilemmaIds((prev) => [...prev, dilemma.id]);
+      const chapter = buildStoryChapterDilemma(sol, site, forecast, weather, storyMemory);
+      setActiveDilemma(chapter);
       setCommsSecondsLeft(site === 'europa' ? 2580 : site === 'mars' ? 864 : 3);
+      setUrgentSecondsLeft(chapter.urgentSeconds ?? null);
       setSimPopups([]);
       setPhase('SOL_DILEMMA');
-      soundEngine.playDilemmaAlert(forecast.radiationMsv >= 18);
+      soundEngine.playDilemmaAlert(forecast.radiationMsv >= 18 || Boolean(chapter.urgentSeconds));
     }, 1150);
   }, [
     phase,
@@ -381,15 +390,32 @@ export default function App() {
     sol,
     site,
     forecast,
-    usedDilemmaIds,
+    weather,
+    storyMemory,
   ]);
 
   const handleResolveDilemma = useCallback(
-    (option: DilemmaOption) => {
+    (option: DilemmaOption, timedOut = false) => {
       if (phase !== 'SOL_DILEMMA' || screen !== 'PLAYING' || !activeDilemma) return;
 
+      setUrgentSecondsLeft(null);
+      if (option.retractPanels !== undefined) {
+        setPanelsRetracted(option.retractPanels);
+      }
+
+      setStoryMemory((prev) => ({
+        ...prev,
+        retractedPanelsOn214:
+          sol === 1 ? Boolean(option.retractPanels) : prev.retractedPanelsOn214,
+        waterShieldedFlare:
+          option.id === 'flood-water-shield' ? true : prev.waterShieldedFlare,
+        actedWithoutEarth: option.id === 'maya-acts-now' ? true : prev.actedWithoutEarth,
+        wentOnEva: option.id === 'hero-eva-expedition' ? true : prev.wentOnEva,
+      }));
+
       const { next, secondaryNotes } = applyDeltas(resources, option.deltas);
-      const combinedNotes = [...outcomeNotes, ...secondaryNotes];
+      const timeoutPrefix = timedOut ? ['Time ran out! Using fallback plan.'] : [];
+      const combinedNotes = [...timeoutPrefix, ...outcomeNotes, ...secondaryNotes];
       const combinedDeltas: ResourceDeltas = {
         power: predictedPowerDeltas.power + option.deltas.power,
         oxygen: predictedPowerDeltas.oxygen + option.deltas.oxygen,
@@ -405,7 +431,7 @@ export default function App() {
       setLogs((prev) => [
         ...prev,
         {
-          sol,
+          sol: displaySol,
           forecastTitle: forecast.title,
           dilemmaTitle: activeDilemma.title,
           chosenLabel: option.label,
@@ -422,7 +448,6 @@ export default function App() {
         return;
       }
 
-      setDeckCollapsed(false);
       setPhase('SOL_OUTCOME');
       soundEngine.playChoiceConfirm();
     },
@@ -430,14 +455,43 @@ export default function App() {
       phase,
       screen,
       activeDilemma,
+      sol,
       resources,
       outcomeNotes,
       predictedPowerDeltas,
-      sol,
+      displaySol,
       forecast.title,
       checkFailure,
     ]
   );
+
+  // 10-Second Urgent Storm Countdown
+  useEffect(() => {
+    if (
+      screen !== 'PLAYING' ||
+      phase !== 'SOL_DILEMMA' ||
+      urgentSecondsLeft === null ||
+      !activeDilemma ||
+      guideOpen
+    ) {
+      return;
+    }
+
+    if (urgentSecondsLeft <= 0) {
+      handleResolveDilemma(activeDilemma.options[2], true);
+      return;
+    }
+
+    const id = window.setTimeout(() => {
+      const nextSec = urgentSecondsLeft - 1;
+      setUrgentSecondsLeft(nextSec);
+      if (nextSec > 0) {
+        soundEngine.playCountdownTick(nextSec <= 3);
+      }
+    }, 1000);
+
+    return () => window.clearTimeout(id);
+  }, [screen, phase, urgentSecondsLeft, activeDilemma, guideOpen, handleResolveDilemma]);
 
   const handleNextSol = useCallback(() => {
     if (phase !== 'SOL_OUTCOME' || screen !== 'PLAYING') return;
@@ -460,27 +514,24 @@ export default function App() {
     }
 
     setSol(nextSol);
+    setPanelsRetracted(false);
     setAllocation(nextAlloc);
     setActiveDilemma(null);
     setChosenOption(null);
     setOutcomeNotes([]);
     setSolNetDeltas(null);
-    setDeckCollapsed(false);
+    setUrgentSecondsLeft(null);
     setPhase('ALLOCATE_POWER');
     soundEngine.playSolLaunch();
   }, [phase, screen, sol, site, difficulty, weather, allocation]);
 
-  // Global keyboard shortcuts
+  // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.key === 'm' || e.key === 'M') {
         toggleMute();
-        return;
-      }
-      if (e.key === 'h' || e.key === 'H') {
-        if (screen === 'PLAYING' && phase !== 'SIMULATING_SOL') setDeckCollapsed((p) => !p);
         return;
       }
       if (e.key === 'Escape') {
@@ -536,449 +587,439 @@ export default function App() {
 
   const siteProfile = SITE_PROFILES[site];
 
-  // Present the 2 sharpest contrasting options per dilemma (Life Support vs Risk/Economy)
   const binaryOptions: DilemmaOption[] = useMemo(() => {
     if (!activeDilemma) return [];
     return [activeDilemma.options[0], activeDilemma.options[2]];
   }, [activeDilemma]);
 
-  // Compact 1-line weather alert for top of Command Deck
-  const weatherCueText =
+  // Ultra-short 1-line kid prompt for Maya
+  const kidPrompt =
     forecast.radiationMsv >= 18
-      ? `${forecast.flareClass} Radiation Surge (${forecast.radiationMsv} mSv) — Shield up!`
+      ? `Solar storm (${forecast.flareClass})! Boost Shield!`
       : forecast.dustStormActive
-        ? `Dust Storm — Solar cut to ${forecast.solarBudget} bars`
-        : forecast.lunarShadowDip
-          ? `Shadow Dip — Solar trimmed to ${forecast.solarBudget} bars`
-          : `${forecast.title} · ${forecast.solarBudget} Solar Bars`;
+        ? `Dusty sky! Only ${forecast.solarBudget} Solar bars.`
+        : sol === 1
+          ? `Tap any building to power it, then hit Go!`
+          : `Ready for Sol ${displaySol}! Set your power.`;
 
   return (
     <div className="w-screen h-dvh overflow-hidden bg-[#04070F] flex items-center justify-center">
-      {/* Dedicated Portrait Game Shell (9:16 mobile aspect on desktop, edge-to-edge on phones) */}
-      <div className="relative w-full max-w-[460px] h-dvh overflow-hidden bg-[#070B16] sm:border-x sm:border-slate-800/90 shadow-2xl flex flex-col">
-        {/* Continuous 3D WebGL Outpost Scene */}
-        <div className="relative flex-1 min-h-0">
-          <OutpostCanvas3D
-            site={site}
-            allocation={allocation}
-            selectedModule={selectedModule}
-            forecast={forecast}
-            canEditPower={screen === 'PLAYING' && phase === 'ALLOCATE_POWER'}
-            isSimulating={screen === 'PLAYING' && phase === 'SIMULATING_SOL'}
-            commsActive={
-              screen === 'PLAYING' &&
-              phase === 'SOL_DILEMMA' &&
-              Boolean(activeDilemma?.requiresCommsDelay)
-            }
-            isTitleMode={screen === 'TITLE_MENU'}
-            pulseEvent={pulseEvent}
-            onTapModule={handleTap3DModule}
-          />
+      {/* Full-Height Portrait Game Viewport */}
+      <div className="relative w-full max-w-[460px] h-dvh overflow-hidden bg-[#070B16] sm:border-x sm:border-slate-800/90 shadow-2xl">
+        {/* Continuous 100% Height 3D World */}
+        <OutpostCanvas3D
+          site={site}
+          allocation={allocation}
+          selectedModule={selectedModule}
+          forecast={forecast}
+          canEditPower={screen === 'PLAYING' && phase === 'ALLOCATE_POWER'}
+          isSimulating={screen === 'PLAYING' && phase === 'SIMULATING_SOL'}
+          panelsRetracted={panelsRetracted}
+          commsActive={
+            screen === 'PLAYING' &&
+            phase === 'SOL_DILEMMA' &&
+            Boolean(activeDilemma?.requiresCommsDelay)
+          }
+          isTitleMode={screen === 'TITLE_MENU'}
+          pulseEvent={pulseEvent}
+          onTapModule={handleTap3DModule}
+        />
 
-          {/* Lean Top Game HUD */}
-          {screen !== 'TITLE_MENU' && (
-            <header className="absolute top-0 inset-x-0 z-20 bg-[#0B1120]/90 border-b border-slate-800 px-3 py-2 space-y-1.5 pointer-events-auto">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0 text-xs">
-                  <span className="font-display font-bold text-white truncate">
-                    {site === 'moon' ? 'Moon' : site === 'mars' ? 'Mars' : 'Europa'}
-                  </span>
-                  <span className="text-slate-500" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="font-mono font-bold text-amber-300 tabular-nums shrink-0">
-                    Sol {sol}/{TOTAL_SOLS}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setGuideOpen(true)}
-                    className="min-h-[36px] px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-slate-100 flex items-center gap-1 cursor-pointer"
-                    aria-label="Open NASA Science Guide"
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                    <span>Guide</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    className="min-h-[36px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
-                    aria-label={muted ? 'Unmute sound' : 'Mute sound'}
-                  >
-                    {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScreen('PAUSED')}
-                    className="min-h-[36px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
-                    aria-label="Pause Mission"
-                  >
-                    <Pause className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Clean 5-Vital Game Bars (Zero Sub-Text Clutter) */}
-              <div className="grid grid-cols-5 gap-1.5">
-                <HudMeter
-                  label="Pwr"
-                  value={resources.power}
-                  icon={<Zap className="w-3 h-3 text-amber-400" aria-hidden="true" />}
-                  barColor="bg-amber-400"
-                />
-                <HudMeter
-                  label="O₂"
-                  value={resources.oxygen}
-                  icon={<Wind className="w-3 h-3 text-cyan-400" aria-hidden="true" />}
-                  barColor="bg-cyan-400"
-                />
-                <HudMeter
-                  label="Food"
-                  value={resources.food}
-                  icon={<Sprout className="w-3 h-3 text-emerald-400" aria-hidden="true" />}
-                  barColor="bg-emerald-400"
-                />
-                <HudMeter
-                  label="Hlth"
-                  value={resources.health}
-                  icon={<Activity className="w-3 h-3 text-sky-400" aria-hidden="true" />}
-                  barColor="bg-sky-400"
-                />
-                <HudMeter
-                  label="Sci"
-                  value={resources.science}
-                  icon={<FlaskConical className="w-3 h-3 text-indigo-400" aria-hidden="true" />}
-                  barColor="bg-indigo-400"
-                  isGoal
-                />
-              </div>
-            </header>
-          )}
-
-          {/* Animated Resource Delta Popups during Sol Simulation */}
-          {screen === 'PLAYING' && phase === 'SIMULATING_SOL' && simPopups.length > 0 && (
-            <div className="absolute inset-x-4 bottom-6 z-20 pointer-events-none flex flex-wrap items-center justify-center gap-2">
-              {simPopups.map((chip) => (
-                <span
-                  key={chip.label}
-                  className={`px-3 py-1.5 rounded-xl font-mono font-bold text-xs shadow-lg border ${
-                    chip.positive
-                      ? 'bg-emerald-950/95 border-emerald-500/70 text-emerald-300'
-                      : 'bg-rose-950/95 border-rose-500/70 text-rose-300'
-                  }`}
-                >
-                  {chip.label}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Title Screen Overlay */}
-          {screen === 'TITLE_MENU' && (
-            <TitleScreen
-              site={site}
-              difficulty={difficulty}
-              weather={weather}
-              muted={muted}
-              onSelectSite={setSite}
-              onSelectDifficulty={setDifficulty}
-              onStart={() => startMission()}
-              onOpenGuide={() => setGuideOpen(true)}
-              onToggleMute={toggleMute}
-            />
-          )}
-        </div>
-
-        {/* Focused Bottom Command Deck (One Clear Decision at a Time) */}
+        {/* Lean Floating Top HUD */}
         {screen !== 'TITLE_MENU' && (
-          <section
-            aria-label="Mission Command Deck"
-            className="shrink-0 relative z-20 bg-[#0D1526] border-t border-slate-800"
-          >
-            {/* Slim Collapse Header / Weather Alert Line */}
-            <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-slate-800/80 bg-[#0A101E]">
-              <span
-                className={`text-[11px] font-semibold truncate ${
-                  phase === 'ALLOCATE_POWER' &&
-                  (forecast.radiationMsv >= 18 || forecast.dustStormActive)
-                    ? 'text-amber-300'
-                    : 'text-slate-300'
-                }`}
-              >
-                {phase === 'ALLOCATE_POWER'
-                  ? weatherCueText
-                  : phase === 'SIMULATING_SOL'
-                    ? `Running Sol ${sol} systems...`
-                    : phase === 'SOL_DILEMMA'
-                      ? 'Mission Choice'
-                      : `Sol ${sol} Complete`}
-              </span>
-              {phase !== 'SIMULATING_SOL' && (
+          <header className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-[#070B16]/95 via-[#070B16]/75 to-transparent px-3 pt-2.5 pb-4 space-y-1.5 pointer-events-auto">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0 text-xs">
+                <span className="font-display font-bold text-white truncate">
+                  {site === 'moon' ? 'Moon' : site === 'mars' ? 'Mars' : 'Europa'}
+                </span>
+                <span className="text-slate-400" aria-hidden="true">
+                  ·
+                </span>
+                <span className="font-mono font-bold text-amber-300 tabular-nums shrink-0">
+                  Sol {displaySol}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setDeckCollapsed((p) => !p)}
-                  className="min-h-[30px] px-2 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
-                  aria-expanded={!deckCollapsed}
+                  onClick={() => setGuideOpen(true)}
+                  className="min-h-[36px] px-2.5 rounded-lg bg-[#0F172A]/90 hover:bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-100 flex items-center gap-1 cursor-pointer"
+                  aria-label="Open NASA Science Guide"
                 >
-                  {deckCollapsed ? (
-                    <>
-                      <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Open</span>
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>View 3D</span>
-                    </>
-                  )}
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                  <span>Guide</span>
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className="min-h-[36px] min-w-[36px] rounded-lg bg-[#0F172A]/90 hover:bg-slate-800 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
+                  aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+                >
+                  {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScreen('PAUSED')}
+                  className="min-h-[36px] min-w-[36px] rounded-lg bg-[#0F172A]/90 hover:bg-slate-800 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
+                  aria-label="Pause Mission"
+                >
+                  <Pause className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            {phase === 'SIMULATING_SOL' && (
-              <div className="px-4 py-4">
+            <div className="grid grid-cols-5 gap-1.5">
+              <HudMeter
+                label="Pwr"
+                value={resources.power}
+                icon={<Zap className="w-3 h-3 text-amber-400" aria-hidden="true" />}
+                barColor="bg-amber-400"
+              />
+              <HudMeter
+                label="Air"
+                value={resources.oxygen}
+                icon={<Wind className="w-3 h-3 text-cyan-400" aria-hidden="true" />}
+                barColor="bg-cyan-400"
+              />
+              <HudMeter
+                label="Food"
+                value={resources.food}
+                icon={<Sprout className="w-3 h-3 text-emerald-400" aria-hidden="true" />}
+                barColor="bg-emerald-400"
+              />
+              <HudMeter
+                label="Hlth"
+                value={resources.health}
+                icon={<Activity className="w-3 h-3 text-sky-400" aria-hidden="true" />}
+                barColor="bg-sky-400"
+              />
+              <HudMeter
+                label="Sci"
+                value={resources.science}
+                icon={<FlaskConical className="w-3 h-3 text-indigo-400" aria-hidden="true" />}
+                barColor="bg-indigo-400"
+                isGoal
+              />
+            </div>
+          </header>
+        )}
+
+        {/* Title Screen Overlay */}
+        {screen === 'TITLE_MENU' && (
+          <TitleScreen
+            site={site}
+            difficulty={difficulty}
+            weather={weather}
+            muted={muted}
+            onSelectSite={setSite}
+            onSelectDifficulty={setDifficulty}
+            onStart={() => startMission()}
+            onOpenGuide={() => setGuideOpen(true)}
+            onToggleMute={toggleMute}
+          />
+        )}
+
+        {/* Floating Resource Popups during Simulation */}
+        {screen === 'PLAYING' && phase === 'SIMULATING_SOL' && simPopups.length > 0 && (
+          <div className="absolute inset-x-4 bottom-20 z-20 pointer-events-none flex flex-wrap items-center justify-center gap-2">
+            {simPopups.map((chip) => (
+              <span
+                key={chip.label}
+                className={`px-3 py-1.5 rounded-xl font-mono font-bold text-xs shadow-lg border ${
+                  chip.positive
+                    ? 'bg-emerald-950/95 border-emerald-500/70 text-emerald-300'
+                    : 'bg-rose-950/95 border-rose-500/70 text-rose-300'
+                }`}
+              >
+                {chip.label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* LIGHTWEIGHT FLOATING STORY CARD AT BOTTOM */}
+        {screen === 'PLAYING' && (
+          <div className="absolute bottom-3 inset-x-3 z-20 pointer-events-auto">
+            {phase === 'SIMULATING_SOL' ? (
+              <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 px-4 py-3 shadow-2xl space-y-2">
+                <p className="text-xs font-semibold text-amber-300 text-center">
+                  Maya is running Sol {displaySol}...
+                </p>
                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full bg-amber-400 rounded-full w-full transition-transform duration-1000 origin-left" />
                 </div>
               </div>
-            )}
+            ) : phase === 'ALLOCATE_POWER' ? (
+              <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 p-3 shadow-2xl space-y-2.5">
+                {/* Row 1: Maya 1-Liner + Simple Solar Count */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {!mayaAvatarFailed ? (
+                      <img
+                        src={MAYA_AVATAR}
+                        alt="Maya"
+                        referrerPolicy="no-referrer"
+                        onError={() => setMayaAvatarFailed(true)}
+                        className="w-8 h-8 rounded-lg object-cover shrink-0 border border-amber-400/60"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-slate-800 shrink-0" />
+                    )}
+                    <p className="text-xs font-medium text-slate-100 truncate">{kidPrompt}</p>
+                  </div>
+                  <span
+                    className={`text-[11px] font-mono font-bold tabular-nums shrink-0 ${
+                      overdrivenBars > 0
+                        ? 'text-rose-300'
+                        : remainingSolarBars > 0
+                          ? 'text-emerald-300'
+                          : 'text-amber-300'
+                    }`}
+                  >
+                    {overdrivenBars > 0
+                      ? 'Using Battery'
+                      : `${remainingSolarBars} Solar Left`}
+                  </span>
+                </div>
 
-            {!deckCollapsed && phase !== 'SIMULATING_SOL' && (
-              <div className="p-3 space-y-2.5 max-h-[42dvh] overflow-y-auto">
-                {/* PHASE 1: SINGLE-FOCUS MODULE POWER ALLOCATION */}
-                {phase === 'ALLOCATE_POWER' && (
-                  <>
-                    {/* Visual Power Core Pool */}
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-300 font-medium">Solar Power:</span>
-                        <div className="flex items-center gap-1" aria-hidden="true">
-                          {Array.from({ length: forecast.solarBudget }).map((_, idx) => (
+                {/* Row 2: Thin 4-Module Switcher */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {MODULE_ORDER.map((key) => {
+                    const info = MODULE_INFO[key];
+                    const level = allocation[key];
+                    const active = selectedModule === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModule(key);
+                          triggerPulse(key);
+                        }}
+                        className={`min-h-[38px] px-1.5 py-1 rounded-xl border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-[#1A2947] border-amber-400 text-white'
+                            : 'bg-[#131D33] border-slate-700/70 text-slate-300 hover:border-slate-500'
+                        }`}
+                      >
+                        <span className="font-display font-bold text-xs">{info.shortName}</span>
+                        <span className="flex items-center gap-0.5" aria-hidden="true">
+                          {[1, 2, 3].map((pip) => (
                             <span
-                              key={idx}
-                              className={`w-3.5 h-2.5 rounded-[3px] ${
-                                idx < usedPowerUnits ? 'bg-amber-400' : 'bg-slate-700'
+                              key={pip}
+                              className={`w-1.5 h-2 rounded-[2px] ${
+                                level >= pip ? info.dotClass : 'bg-slate-700'
                               }`}
                             />
                           ))}
-                        </div>
-                      </div>
-                      <span
-                        className={`font-mono font-bold tabular-nums ${
-                          overdrivenBars > 0
-                            ? 'text-rose-300'
-                            : remainingSolarBars > 0
-                              ? 'text-emerald-300'
-                              : 'text-slate-300'
-                        }`}
-                      >
-                        {overdrivenBars > 0
-                          ? `Overdrive (-${overdrivenBars * 11}% Bat)`
-                          : remainingSolarBars > 0
-                            ? `${remainingSolarBars} free (+${remainingSolarBars * 7}% Bat)`
-                            : 'Full Solar Used'}
-                      </span>
-                    </div>
-
-                    {/* 4 Compact Building Selector Tabs */}
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {MODULE_ORDER.map((key) => {
-                        const info = MODULE_INFO[key];
-                        const level = allocation[key];
-                        const active = selectedModule === key;
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => {
-                              setSelectedModule(key);
-                              triggerPulse(key);
-                            }}
-                            className={`min-h-[44px] px-1.5 py-1.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
-                              active
-                                ? 'bg-[#172542] border-amber-400 text-white'
-                                : 'bg-[#131C30] border-slate-700/80 text-slate-300 hover:border-slate-500'
-                            }`}
-                          >
-                            <span className="font-display font-bold text-xs leading-none">
-                              {info.shortName}
-                            </span>
-                            <span className="flex items-center gap-0.5" aria-hidden="true">
-                              {[1, 2, 3].map((pip) => (
-                                <span
-                                  key={pip}
-                                  className={`w-2 h-1.5 rounded-xs ${
-                                    level >= pip ? info.dotClass : 'bg-slate-700'
-                                  }`}
-                                />
-                              ))}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Single Focused Building Card (Only ONE - / + control visible!) */}
-                    <div className="rounded-xl bg-[#162033] border border-slate-700/90 p-2.5 flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-display font-bold text-sm text-white truncate">
-                          {MODULE_INFO[selectedModule].name}
-                        </p>
-                        <p className="text-xs text-cyan-200 truncate mt-0.5">
-                          {getModuleEffectSummary(
-                            selectedModule,
-                            allocation[selectedModule],
-                            site,
-                            forecast.radiationMsv
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => adjustModulePower(selectedModule, -1)}
-                          disabled={allocation[selectedModule] <= 0}
-                          aria-label={`Decrease power for ${MODULE_INFO[selectedModule].name}`}
-                          className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed border border-slate-600 flex items-center justify-center text-white cursor-pointer"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="w-8 text-center font-mono font-bold text-sm tabular-nums text-amber-300">
-                          {allocation[selectedModule]}/3
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => adjustModulePower(selectedModule, 1)}
-                          disabled={
-                            allocation[selectedModule] >= 3 || usedPowerUnits >= maxAllowedUnits
-                          }
-                          aria-label={`Increase power for ${MODULE_INFO[selectedModule].name}`}
-                          className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed border border-slate-600 flex items-center justify-center text-white cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                      </button>
+                    );
+                  })}
+                </div>
 
+                {/* Row 3: Selected Building + Big - / + + Go Button */}
+                <div className="flex items-center justify-between gap-2 pt-0.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display font-bold text-sm text-white truncate leading-tight">
+                      {MODULE_INFO[selectedModule].name}
+                    </p>
+                    <p className="text-[11px] text-cyan-200 truncate">
+                      {getKidEffectLine(
+                        selectedModule,
+                        allocation[selectedModule],
+                        site,
+                        forecast.radiationMsv
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => adjustModulePower(selectedModule, -1)}
+                      disabled={allocation[selectedModule] <= 0}
+                      aria-label={`Less power for ${MODULE_INFO[selectedModule].name}`}
+                      className="w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 border border-slate-600 flex items-center justify-center text-white cursor-pointer"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => adjustModulePower(selectedModule, 1)}
+                      disabled={
+                        allocation[selectedModule] >= 3 || usedPowerUnits >= maxAllowedUnits
+                      }
+                      aria-label={`More power for ${MODULE_INFO[selectedModule].name}`}
+                      className="w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 border border-slate-600 flex items-center justify-center text-white cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={handleRunSolPower}
-                      className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+                      className="h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
                     >
-                      <span>Start Sol {sol}</span>
+                      <span>Go!</span>
                       <ArrowRight className="w-4 h-4" aria-hidden="true" />
                     </button>
-                  </>
-                )}
-
-                {/* PHASE 3: CLEAN 2-OPTION TACTICAL DILEMMA */}
-                {phase === 'SOL_DILEMMA' && activeDilemma && (
-                  <div className="space-y-2.5">
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="font-display font-bold text-base text-white leading-tight">
-                          {activeDilemma.title}
-                        </h2>
-                        {activeDilemma.requiresCommsDelay && (
-                          <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300 shrink-0">
-                            <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-                            {site === 'mars' || site === 'europa'
-                              ? `${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`
-                              : `${commsSecondsLeft}s`}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-200 leading-snug mt-1">
-                        {activeDilemma.briefing}{' '}
-                        {activeDilemma.requiresCommsDelay && (
-                          <GlossaryTerm termKey="Light-Time Delay" label="Why delay?" />
-                        )}
-                        {activeDilemma.category === 'Solar Weather' && (
-                          <GlossaryTerm termKey="CME" label="What is CME?" />
-                        )}
-                      </p>
+                  </div>
+                </div>
+              </div>
+            ) : phase === 'SOL_DILEMMA' && activeDilemma ? (
+              <div className="rounded-2xl bg-[#0F172A]/96 border border-slate-700/90 p-3 shadow-2xl space-y-2.5 max-h-[46dvh] overflow-y-auto">
+                {urgentSecondsLeft !== null && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-mono font-bold tabular-nums">
+                      <span className="flex items-center gap-1 text-rose-300">
+                        <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Decide Fast!</span>
+                      </span>
+                      <span className={urgentSecondsLeft <= 3 ? 'text-rose-400' : 'text-amber-300'}>
+                        {urgentSecondsLeft}s
+                      </span>
                     </div>
-
-                    <div className="space-y-2">
-                      {binaryOptions.map((opt) => {
-                        const chips = getDeltaChips(opt.deltas);
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => handleResolveDilemma(opt)}
-                            className="w-full min-h-[54px] text-left p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E2C47] border border-slate-700 hover:border-amber-400 transition-colors flex flex-col justify-center gap-1.5 cursor-pointer"
-                          >
-                            <span className="font-display font-bold text-sm text-white leading-tight">
-                              {opt.label}
-                            </span>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {chips.map((c) => (
-                                <span
-                                  key={c.label}
-                                  className={`text-[11px] font-mono font-semibold tabular-nums ${
-                                    c.positive ? 'text-emerald-300' : 'text-rose-300'
-                                  }`}
-                                >
-                                  {c.label}
-                                </span>
-                              ))}
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full w-full transition-transform duration-1000 linear origin-left ${
+                          urgentSecondsLeft <= 3 ? 'bg-rose-500' : 'bg-amber-400'
+                        }`}
+                        style={{
+                          transform: `scaleX(${Math.max(
+                            0,
+                            Math.min(1, urgentSecondsLeft / (activeDilemma.urgentSeconds || 10))
+                          )})`,
+                        }}
+                      />
                     </div>
                   </div>
                 )}
 
-                {/* PHASE 4: PUNCHY SOL RESULT */}
-                {phase === 'SOL_OUTCOME' && chosenOption && (
-                  <div className="space-y-2.5">
-                    <div className="space-y-1.5">
-                      <p className="font-display font-bold text-sm text-amber-300">
-                        {chosenOption.label}
-                      </p>
-                      {solNetDeltas && (
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-semibold tabular-nums">
-                          {getDeltaChips(solNetDeltas).map((c) => (
+                <div className="flex items-start gap-2.5">
+                  {!mayaAvatarFailed ? (
+                    <img
+                      src={MAYA_AVATAR}
+                      alt="Commander Maya"
+                      referrerPolicy="no-referrer"
+                      onError={() => setMayaAvatarFailed(true)}
+                      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-amber-400/60"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-slate-800 shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="font-display font-bold text-sm text-white leading-tight">
+                        {activeDilemma.title}
+                      </h2>
+                      {activeDilemma.requiresCommsDelay && (
+                        <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300 shrink-0">
+                          <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                          {site === 'mars' || site === 'europa'
+                            ? `${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`
+                            : `${commsSecondsLeft}s`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-200 leading-snug mt-1">
+                      {activeDilemma.briefing}{' '}
+                      {activeDilemma.requiresCommsDelay && (
+                        <GlossaryTerm termKey="Light-Time Delay" label="Why delay?" />
+                      )}
+                      {activeDilemma.category === 'Solar Weather' && (
+                        <GlossaryTerm termKey="CME" label="CME?" />
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {binaryOptions.map((opt) => {
+                    const chips = getDeltaChips(opt.deltas).slice(0, 3);
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => handleResolveDilemma(opt)}
+                        className="w-full min-h-[52px] text-left px-3 py-2 rounded-xl bg-[#162033] hover:bg-[#1E2C47] border border-slate-700 hover:border-amber-400 transition-colors flex flex-col justify-center gap-1 cursor-pointer"
+                      >
+                        <span className="font-display font-bold text-sm text-white leading-tight">
+                          {opt.label}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {chips.map((c) => (
                             <span
                               key={c.label}
-                              className={c.positive ? 'text-emerald-300' : 'text-rose-300'}
+                              className={`text-[11px] font-mono font-semibold tabular-nums ${
+                                c.positive ? 'text-emerald-300' : 'text-rose-300'
+                              }`}
                             >
                               {c.label}
                             </span>
                           ))}
                         </div>
-                      )}
-                      <p className="text-xs text-slate-200 leading-snug">
-                        {chosenOption.outcomeStory}
-                      </p>
-                      {outcomeNotes.length > 0 && (
-                        <p className="text-xs text-rose-300 font-medium">
-                          {outcomeNotes.join(' ')}
-                        </p>
-                      )}
-                      <p className="text-[11px] text-cyan-300">
-                        <strong>NASA Note:</strong> {chosenOption.scienceTakeaway}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleNextSol}
-                      className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <span>{sol >= TOTAL_SOLS ? 'Finish Mission' : `Next: Sol ${sol + 1}`}</span>
-                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            )}
-          </section>
+            ) : phase === 'SOL_OUTCOME' && chosenOption ? (
+              <div className="rounded-2xl bg-[#0F172A]/96 border border-slate-700/90 p-3 shadow-2xl space-y-2.5 max-h-[44dvh] overflow-y-auto">
+                <div className="flex items-start gap-2.5">
+                  {!mayaAvatarFailed ? (
+                    <img
+                      src={MAYA_AVATAR}
+                      alt="Commander Maya"
+                      referrerPolicy="no-referrer"
+                      onError={() => setMayaAvatarFailed(true)}
+                      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-emerald-400/60"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-slate-800 shrink-0" />
+                  )}
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <p className="font-display font-bold text-sm text-amber-300">
+                      {chosenOption.label}
+                    </p>
+                    {solNetDeltas && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-semibold tabular-nums">
+                        {getDeltaChips(solNetDeltas).map((c) => (
+                          <span
+                            key={c.label}
+                            className={c.positive ? 'text-emerald-300' : 'text-rose-300'}
+                          >
+                            {c.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-slate-200 leading-snug">
+                      {chosenOption.outcomeStory}
+                    </p>
+                    {outcomeNotes.length > 0 && (
+                      <p className="text-xs text-rose-300 font-medium">
+                        {outcomeNotes.join(' ')}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-cyan-300">
+                      <strong>NASA Fact:</strong> {chosenOption.scienceTakeaway}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleNextSol}
+                  className="w-full min-h-[46px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span>{sol >= TOTAL_SOLS ? 'Finish Story' : `Next: Sol ${displaySol + 1}`}</span>
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </div>
         )}
 
         {/* Pause Modal */}
@@ -993,7 +1034,7 @@ export default function App() {
               <div>
                 <h2 className="font-display font-bold text-xl text-white">Mission Paused</h2>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  {siteProfile.name} · Sol {sol} of {TOTAL_SOLS}
+                  {siteProfile.name} · Sol {displaySol}
                 </p>
               </div>
               <div className="flex flex-col gap-2">
@@ -1003,7 +1044,7 @@ export default function App() {
                   className="min-h-[44px] w-full px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-slate-950" aria-hidden="true" />
-                  <span>Resume Mission</span>
+                  <span>Resume Story</span>
                 </button>
                 <button
                   type="button"
@@ -1019,7 +1060,7 @@ export default function App() {
                   className="min-h-[44px] w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                  <span>Restart Sol 1</span>
+                  <span>Restart Sol 214</span>
                 </button>
                 <button
                   type="button"
@@ -1071,7 +1112,7 @@ function HudMeter({ label, value, icon, barColor, isGoal = false }: HudMeterProp
   return (
     <div
       className={`flex flex-col gap-1 min-w-0 rounded-lg px-1.5 py-1 ${
-        isDanger ? 'bg-rose-950/70 border border-rose-500/70' : 'bg-[#0F182D]'
+        isDanger ? 'bg-rose-950/75 border border-rose-500/70' : 'bg-[#0F182D]/90'
       }`}
     >
       <div className="flex items-center justify-between gap-0.5 text-[11px]">

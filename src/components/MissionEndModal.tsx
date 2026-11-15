@@ -60,10 +60,10 @@ export function MissionEndModal({
               <span className="mx-2" aria-hidden="true">
                 ·
               </span>
-              Reached Sol {solReached} of 7
+              Commander Maya · Sol {214 + solReached - 1}
             </p>
             <h2 className="font-display font-extrabold text-2xl text-white mt-0.5">
-              {victory ? `Mission Accomplished: ${rankInfo.rank}` : 'Outpost Emergency Abort'}
+              {victory ? `Story Complete: ${rankInfo.rank}` : 'Outpost Emergency Abort'}
             </h2>
             <p className="text-sm text-slate-300 mt-1">
               {victory ? rankInfo.summary : failureReason}

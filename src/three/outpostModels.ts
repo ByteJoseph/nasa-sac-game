@@ -62,6 +62,7 @@ export interface Outpost3DRefs {
   weatherParticles: THREE.Points;
   weatherParticleMat: THREE.PointsMaterial;
   astronauts: THREE.Group[];
+  heroAstronaut: THREE.Group;
   clickableTargets: THREE.Mesh[];
   modulePositions: Record<ModuleKey, THREE.Vector3>;
   disposables: Array<{ dispose: () => void }>;
@@ -344,7 +345,7 @@ export function buildOutpostWorld(
   root.add(pathMesh);
   disposables.push(pathTubeGeo);
 
-  // Foreground 2 Walking Astronauts on the gravel path
+  // Foreground Hero Astronaut Commander (Maya) + Crewmate on the gravel path
   const astro1 = buildAstronaut(
     hullWhiteMat,
     hullCreamMat,
@@ -353,7 +354,8 @@ export function buildOutpostWorld(
     isSoftwareGl,
     disposables
   );
-  astro1.position.set(-0.75, 0, 4.1);
+  astro1.scale.setScalar(1.22);
+  astro1.position.set(-0.65, 0, 2.75);
   astro1.rotation.y = 0.25;
   const astro2 = buildAstronaut(
     hullWhiteMat,
@@ -363,8 +365,8 @@ export function buildOutpostWorld(
     isSoftwareGl,
     disposables
   );
-  astro2.position.set(-0.15, 0, 3.65);
-  astro2.rotation.y = -0.15;
+  astro2.position.set(0.25, 0, 4.15);
+  astro2.rotation.y = -0.22;
   root.add(astro1, astro2);
 
   // 4. Central Octagonal Command Hub (connects all modules)
@@ -966,6 +968,7 @@ export function buildOutpostWorld(
     weatherParticles,
     weatherParticleMat,
     astronauts: [astro1, astro2],
+    heroAstronaut: astro1,
     clickableTargets,
     modulePositions,
     disposables,

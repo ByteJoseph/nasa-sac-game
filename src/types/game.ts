@@ -77,6 +77,7 @@ export interface DilemmaOption {
   deltas: ResourceDeltas;
   outcomeStory: string;
   scienceTakeaway: string;
+  retractPanels?: boolean;
 }
 
 export interface DilemmaCard {
@@ -86,6 +87,7 @@ export interface DilemmaCard {
   siteFilter: 'both' | OutpostSite;
   requiresCommsDelay?: boolean;
   commsDelayLabel?: string;
+  urgentSeconds?: number;
   briefing: string;
   nasaCitation: string;
   options: [DilemmaOption, DilemmaOption, DilemmaOption];

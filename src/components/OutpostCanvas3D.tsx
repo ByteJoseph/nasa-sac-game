@@ -19,6 +19,7 @@ interface OutpostCanvas3DProps {
   forecast: SolForecast;
   canEditPower: boolean;
   isSimulating: boolean;
+  panelsRetracted: boolean;
   commsActive: boolean;
   isTitleMode: boolean;
   pulseEvent: PulseEvent | null;
@@ -38,6 +39,7 @@ const _raycaster = new THREE.Raycaster();
 const _pointerNdc = new THREE.Vector2();
 const _targetBgColor = new THREE.Color();
 const _focusTarget = new THREE.Vector3();
+const _astroGoal = new THREE.Vector3();
 
 function detectSoftwareWebGL(): boolean {
   try {
@@ -61,6 +63,7 @@ export function OutpostCanvas3D({
   forecast,
   canEditPower,
   isSimulating,
+  panelsRetracted,
   commsActive,
   isTitleMode,
   pulseEvent,
@@ -84,6 +87,7 @@ export function OutpostCanvas3D({
     forecast,
     canEditPower,
     isSimulating,
+    panelsRetracted,
     commsActive,
     isTitleMode,
     pulseEvent,
@@ -96,6 +100,7 @@ export function OutpostCanvas3D({
     forecast,
     canEditPower,
     isSimulating,
+    panelsRetracted,
     commsActive,
     isTitleMode,
     pulseEvent,
@@ -167,15 +172,15 @@ export function OutpostCanvas3D({
 
     const initialFov = width / height < 0.56 ? 52 : 46;
     const camera = new THREE.PerspectiveCamera(initialFov, width / height, 0.2, 120);
-    camera.position.set(0.2, 9.8, 15.8);
+    camera.position.set(0.2, 10.2, 16.5);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(-0.3, 0.55, 0.35);
+    controls.target.set(-0.3, -0.1, 1.15);
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.06;
     controls.enablePan = false;
     controls.minDistance = 8.5;
-    controls.maxDistance = 22.5;
+    controls.maxDistance = 23.0;
     controls.minPolarAngle = 0.35;
     controls.maxPolarAngle = Math.PI * 0.42;
     controls.minAzimuthAngle = -Math.PI * 0.45;
@@ -354,6 +359,7 @@ export function OutpostCanvas3D({
         forecast: fc,
         canEditPower: canEdit,
         isSimulating: simActive,
+        panelsRetracted: retracted,
         commsActive: comms,
         isTitleMode: titleMode,
         site: curSite,
@@ -386,14 +392,16 @@ export function OutpostCanvas3D({
       }
 
       if (world) {
-        // 1. Solar Array local tilt & brightness
-        const targetTilt = fc.lunarShadowDip ? 0.15 : 0.48;
+        // 1. Solar Array tilt, retraction during storms & brightness
+        const targetTilt = retracted ? 1.54 : fc.lunarShadowDip ? 0.15 : 0.48;
+        const targetWingY = retracted ? 0.54 : 0.78;
         world.solarPanelWings.forEach((wing) => {
-          wing.rotation.x = THREE.MathUtils.damp(wing.rotation.x, targetTilt, 4, dt);
+          wing.rotation.x = THREE.MathUtils.damp(wing.rotation.x, targetTilt, 4.5, dt);
+          wing.position.y = THREE.MathUtils.damp(wing.position.y, targetWingY, 4.5, dt);
         });
         world.solarPanelMat.emissiveIntensity = THREE.MathUtils.damp(
           world.solarPanelMat.emissiveIntensity,
-          fc.dustStormActive ? 0.08 : 0.42,
+          retracted ? 0.04 : fc.dustStormActive ? 0.08 : 0.42,
           4,
           dt
         );
@@ -480,12 +488,37 @@ export function OutpostCanvas3D({
           });
         }
 
-        // 7. Gentle Astronaut idle/walk animation along footpath
-        world.astronauts.forEach((astro, idx) => {
-          const bob = Math.abs(Math.sin(elapsed * 3.0 + idx * 1.5)) * 0.04;
-          astro.position.y = bob;
-          astro.rotation.z = Math.sin(elapsed * 2.2 + idx) * 0.04;
-        });
+        // 7. Hero Astronaut Commander Maya walks to the active module!
+        const hero = world.heroAstronaut;
+        if (titleMode) {
+          _astroGoal.set(-0.65, 0, 2.75);
+        } else {
+          const mPos = world.modulePositions[selMod];
+          _astroGoal.set(mPos.x * 0.58, 0, Math.min(3.3, mPos.z * 0.58 + 1.45));
+        }
+        const distSq =
+          (hero.position.x - _astroGoal.x) * (hero.position.x - _astroGoal.x) +
+          (hero.position.z - _astroGoal.z) * (hero.position.z - _astroGoal.z);
+        if (distSq > 0.01) {
+          const dx = _astroGoal.x - hero.position.x;
+          const dz = _astroGoal.z - hero.position.z;
+          hero.position.x = THREE.MathUtils.damp(hero.position.x, _astroGoal.x, 3.6, dt);
+          hero.position.z = THREE.MathUtils.damp(hero.position.z, _astroGoal.z, 3.6, dt);
+          hero.rotation.y = Math.atan2(dx, dz);
+          hero.position.y = Math.abs(Math.sin(elapsed * 9)) * 0.08;
+          hero.rotation.z = Math.sin(elapsed * 9) * 0.06;
+        } else {
+          hero.position.y = Math.abs(Math.sin(elapsed * 2.2)) * 0.025;
+          hero.rotation.z = 0;
+          hero.rotation.y = THREE.MathUtils.damp(hero.rotation.y, 0.18, 4, dt);
+        }
+
+        // Companion crewmate gentle idle motion
+        const buddy = world.astronauts[1];
+        if (buddy) {
+          buddy.position.y = Math.abs(Math.sin(elapsed * 2.8 + 1.2)) * 0.035;
+          buddy.rotation.z = Math.sin(elapsed * 2.0) * 0.03;
+        }
 
         // 8. Atmospheric Weather Particles drift (zero allocations)
         world.weatherParticles.rotation.y += dt * (fc.dustStormActive ? 0.35 : 0.06) * simMult;
@@ -542,7 +575,7 @@ export function OutpostCanvas3D({
         // 11. Gentle Camera Target Nudge toward Selected Module during Allocate Power
         if (focusActiveRef.current && canEdit && !titleMode) {
           const mPos = world.modulePositions[selMod];
-          _focusTarget.set(-0.3 + mPos.x * 0.28, 0.55, 0.35 + mPos.z * 0.25);
+          _focusTarget.set(-0.3 + mPos.x * 0.24, -0.1, 1.15 + mPos.z * 0.22);
           controls.target.lerp(_focusTarget, 1 - Math.exp(-4.5 * dt));
           if (controls.target.distanceToSquared(_focusTarget) < 0.002) {
             focusActiveRef.current = false;
