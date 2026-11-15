@@ -1,6 +1,6 @@
 export type GameScreen = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'MISSION_COMPLETE' | 'MISSION_FAILED';
 
-export type OutpostSite = 'moon' | 'mars' | 'europa';
+export type OutpostSite = 'mars';
 
 export type DifficultyMode = 'cadet' | 'commander';
 

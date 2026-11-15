@@ -18,28 +18,27 @@ export const INITIAL_STORY_MEMORY: StoryMemory = {
 
 export function getAstronautBrief(
   solIndex: number,
-  site: OutpostSite,
+  _site: OutpostSite,
   forecast: SolForecast,
   memory: StoryMemory
 ): string {
   const displaySol = MISSION_START_SOL + solIndex - 1;
-  const worldNoun = site === 'moon' ? 'lunar ridge' : site === 'mars' ? 'Jezero floor' : 'ice crust';
 
   if (solIndex === 1) {
-    return `Sol ${displaySol}. I'm Commander Maya on solo watch. Route ${forecast.solarBudget} solar bars before dark—storm clouds are building.`;
+    return `Sol ${displaySol}. I'm Commander Maya on solo watch in Jezero Crater. Route ${forecast.solarBudget} solar bars before dark—dust clouds are building.`;
   }
   if (solIndex === 2) {
     return memory.retractedPanelsOn214
-      ? `Sol ${displaySol}. Retracting our arrays saved the hinges, though our battery bank is low. Help me balance air and power.`
-      : `Sol ${displaySol}. Leaving the panels out powered last night, but grit jammed the joints. Let's nurse our power budget.`;
+      ? `Sol ${displaySol}. Retracting our solar wings saved the hinges, though our Mars battery bank is low. Help me balance air and power.`
+      : `Sol ${displaySol}. Leaving the panels out powered last night, but Martian grit jammed the joints. Let's nurse our power budget.`;
   }
   if (solIndex === 3) {
     return forecast.radiationMsv >= 18
-      ? `Sol ${displaySol}. NASA DONKI just flashed a ${forecast.flareClass} flare alert! Check our Radiation Shield before running the base.`
-      : `Sol ${displaySol}. Radiation sensors are rising across the ${worldNoun}. Let's protect crew health without starving the farm.`;
+      ? `Sol ${displaySol}. NASA DONKI just flashed a ${forecast.flareClass} flare alert! Check our Radiation Shelter before running the base.`
+      : `Sol ${displaySol}. Radiation sensors are rising across Jezero Crater. Let's protect crew health without starving the farm.`;
   }
   if (solIndex === 4) {
-    return `Sol ${displaySol}. Earth is ${site === 'moon' ? '384,400 km' : site === 'mars' ? '130M km' : '780M km'} away today. Keep life support steady for field checks.`;
+    return `Sol ${displaySol}. Earth is 130M km away today (14 min radio lag). Keep life support steady for field checks.`;
   }
   if (solIndex === 5) {
     return `Sol ${displaySol}. Equipment strain is piling up across the tunnels. Every watt has to count today.`;
@@ -63,23 +62,17 @@ export function buildStoryChapterDilemma(
       ? `Live NOAA/NASA feed (${weather.latestFlareClass}, ${weather.solarWindSpeedKms} km/s)`
       : `NASA DONKI archive (${weather.latestFlareClass}, ${weather.solarWindSpeedKms} km/s)`;
 
-  // CHAPTER 1 (Sol 214): Iconic 10-Second Storm Panel Decision
+  // CHAPTER 1 (Sol 214): Iconic 10-Second Mars Dust Storm Panel Decision
   if (solIndex === 1) {
-    const stormType =
-      site === 'moon'
-        ? 'static dust & solar squall'
-        : site === 'mars'
-          ? 'fast-moving iron-dust storm'
-          : 'cryo-plume ice squall';
-
     return {
       id: 'story-sol214-storm',
       title: `Sol ${displaySol}: 10 Seconds to Save the Arrays!`,
       category: 'Solar Weather',
       siteFilter: site,
       urgentSeconds: 10,
-      briefing: `A sudden ${stormType} just rolled across the ridge! Your solar wings are about to get buried or sandblasted. Decide in 10 seconds:`,
-      nasaCitation: 'NASA Artemis / Mars MEDA Dust & Solar Array Survival',
+      briefing:
+        'A fast-moving Martian iron-dust storm just rolled across Jezero rim! Your solar wings are about to get buried or sandblasted. Decide in 10 seconds:',
+      nasaCitation: 'NASA Mars 2020 Perseverance MEDA Dust & Solar Array Survival',
       options: [
         {
           id: 'retract-panels',
@@ -220,14 +213,9 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 4 (Sol 217): Light-Time Delay Emergency (Zero Earth Help!)
+  // CHAPTER 4 (Sol 217): 14-Minute Light-Time Delay Emergency (Zero Earth Help!)
   if (solIndex === 4) {
-    const delayDesc =
-      site === 'moon'
-        ? '2.6 seconds round-trip—Houston can barely chime in before pressure drops!'
-        : site === 'mars'
-          ? '14 minutes round-trip! Earth cannot hear your SOS in time.'
-          : '86 minutes round-trip! Houston is over an hour away by radio.';
+    const delayDesc = '14 minutes round-trip! Earth cannot hear your SOS in time.';
 
     return {
       id: 'story-sol217-comms-leak',
@@ -236,9 +224,9 @@ export function buildStoryChapterDilemma(
       siteFilter: site,
       requiresCommsDelay: true,
       commsDelayLabel: delayDesc,
-      urgentSeconds: site === 'moon' ? undefined : 10,
-      briefing: `Grit jammed the Greenhouse airlock seal! ${delayDesc} Maya has to make the call right now:`,
-      nasaCitation: 'NASA Deep Space Network & Autonomous Crew Operations',
+      urgentSeconds: 10,
+      briefing: `Mars dust jammed the Greenhouse airlock seal! ${delayDesc} Maya has to make the call right now:`,
+      nasaCitation: 'NASA Deep Space Network & Autonomous Mars Operations',
       options: [
         {
           id: 'maya-acts-now',
@@ -323,11 +311,7 @@ export function buildStoryChapterDilemma(
       category: 'Rover Science',
       siteFilter: site,
       briefing:
-        site === 'europa'
-          ? 'The thermal drill hit liquid brine meters beneath Europa’s ice! Sending Maya out for a core sample risks Jupiter radiation, while resting recovers health.'
-          : site === 'moon'
-            ? 'Maya spotted ancient water-ice crystal in a shadowed pit! Going on EVA yields air/science, while resting indoors preserves stamina.'
-            : 'Scanners spotted an ancient riverbed outcrop just beyond the rover path! Should Maya suit up for a final EVA or stay indoors to rest?',
+        'Scanners spotted an ancient Jezero riverbed outcrop just beyond the rover path! Should Maya suit up for a final EVA or stay indoors to rest?',
       nasaCitation: 'NASA OSDR Crew Health & EVA Radiation Management',
       options: [
         {
@@ -370,7 +354,7 @@ export function buildStoryChapterDilemma(
     siteFilter: site,
     briefing:
       'The cargo & relief lander is descending toward Pad 1! Maya can either fire full radar beacons to guide a rich science drop or cut all non-essential power for a safe landing.',
-    nasaCitation: 'NASA Artemis / Mars Precision Landing & Hazard Avoidance',
+    nasaCitation: 'NASA Mars Precision Landing & Hazard Avoidance',
     options: [
       {
         id: 'safe-minimal-landing',

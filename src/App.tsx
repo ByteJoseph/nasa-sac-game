@@ -125,16 +125,11 @@ function formatDelta(n: number): string {
 function getKidEffectLine(
   key: ModuleKey,
   level: number,
-  site: OutpostSite,
+  _site: OutpostSite,
   radiationMsv: number
 ): string {
   if (key === 'scrubber') {
-    const gain =
-      site === 'moon'
-        ? [0, 10, 19, 27][level]
-        : site === 'europa'
-          ? [0, 11, 20, 28][level]
-          : [0, 9, 17, 25][level];
+    const gain = [0, 9, 17, 25][level];
     return level === 0 ? 'Off · Air drops' : `Fresh Air +${gain}%`;
   }
   if (key === 'greenhouse') {
@@ -145,7 +140,7 @@ function getKidEffectLine(
     const pct = [10, 45, 78, 94][level];
     return radiationMsv >= 18 ? `Blocks ${pct}% · Storm!` : `Blocks ${pct}% rays`;
   }
-  const sci = (site === 'europa' ? [0, 12, 22, 30] : [0, 11, 20, 28])[level];
+  const sci = [0, 11, 20, 28][level];
   return level === 0 ? 'Parked' : `Science +${sci}%`;
 }
 
@@ -167,7 +162,7 @@ function getDeltaChips(deltas: ResourceDeltas): Array<{ label: string; positive:
 
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('TITLE_MENU');
-  const [site, setSite] = useState<OutpostSite>('moon');
+  const site: OutpostSite = 'mars';
   const [difficulty, setDifficulty] = useState<DifficultyMode>('cadet');
   const [weather, setWeather] = useState<SpaceWeatherSnapshot>(DEFAULT_WEATHER);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -181,7 +176,7 @@ export default function App() {
   const [panelsRetracted, setPanelsRetracted] = useState(false);
   const [storyMemory, setStoryMemory] = useState<StoryMemory>(INITIAL_STORY_MEMORY);
   const [resources, setResources] = useState<CoreResources>(() =>
-    getInitialResources('moon', 'cadet')
+    getInitialResources('mars', 'cadet')
   );
   const [allocation, setAllocation] = useState<ModuleAllocation>(INITIAL_ALLOCATION);
   const [activeDilemma, setActiveDilemma] = useState<DilemmaCard | null>(null);
@@ -371,7 +366,7 @@ export default function App() {
 
       const chapter = buildStoryChapterDilemma(sol, site, forecast, weather, storyMemory);
       setActiveDilemma(chapter);
-      setCommsSecondsLeft(site === 'europa' ? 2580 : site === 'mars' ? 864 : 3);
+      setCommsSecondsLeft(864);
       setUrgentSecondsLeft(chapter.urgentSeconds ?? null);
       setSimPopups([]);
       setPhase('SOL_DILEMMA');
@@ -628,7 +623,7 @@ export default function App() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 min-w-0 text-xs">
                 <span className="font-display font-bold text-white truncate">
-                  {site === 'moon' ? 'Moon' : site === 'mars' ? 'Mars' : 'Europa'}
+                  Jezero · Mars
                 </span>
                 <span className="text-slate-400" aria-hidden="true">
                   ·
@@ -706,11 +701,9 @@ export default function App() {
         {/* Title Screen Overlay */}
         {screen === 'TITLE_MENU' && (
           <TitleScreen
-            site={site}
             difficulty={difficulty}
             weather={weather}
             muted={muted}
-            onSelectSite={setSite}
             onSelectDifficulty={setDifficulty}
             onStart={() => startMission()}
             onOpenGuide={() => setGuideOpen(true)}
@@ -891,9 +884,7 @@ export default function App() {
                     {activeDilemma.requiresCommsDelay && (
                       <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300 shrink-0">
                         <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-                        {site === 'mars' || site === 'europa'
-                          ? `${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`
-                          : `${commsSecondsLeft}s`}
+                        {`${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`}
                       </span>
                     )}
                   </div>

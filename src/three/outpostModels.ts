@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import type { ModuleKey, OutpostSite } from '../types/game';
 import {
-  createJupiterTexture,
   createLandingPadTexture,
   createSolarGridTexture,
   createTerrainTexture,
 } from './proceduralTextures';
 
-export function groundHeightAt(x: number, z: number, site: OutpostSite): number {
+export function groundHeightAt(x: number, z: number, _site: OutpostSite): number {
   const dist = Math.sqrt(x * x + z * z);
 
   // Canyon rim drop-off on the far left (behind/below the helipads)
@@ -19,16 +18,12 @@ export function groundHeightAt(x: number, z: number, site: OutpostSite): number 
   // Flat central outpost plateau so all spaced-out modules, pads, and paths sit flush
   if (dist <= 10.2) return 0;
 
-  // Distant layered canyon mesas & crater rims
+  // Distant layered Martian canyon mesas & Jezero crater rims
   const rimT = Math.min(1, (dist - 10.2) / 18);
   const smooth = rimT * rimT * (3 - 2 * rimT);
   const mesaSteps =
     Math.round(
-      (Math.sin(x * 0.22 + (site === 'mars' ? 1.1 : site === 'europa' ? 2.4 : 0)) *
-        Math.cos(z * 0.2) *
-        1.1 +
-        smooth * (site === 'mars' ? 4.8 : site === 'moon' ? 4.5 : 3.4)) *
-        2
+      (Math.sin(x * 0.22 + 1.1) * Math.cos(z * 0.2) * 1.1 + smooth * 4.8) * 2
     ) / 2;
   return Math.max(0, mesaSteps);
 }
@@ -46,9 +41,6 @@ export interface Outpost3DRefs {
   o2BubblesGroup: THREE.Group;
   greenhouseLedMat: THREE.MeshStandardMaterial;
   greenhousePlants: THREE.Group;
-  shieldDomeMat: THREE.MeshPhysicalMaterial;
-  shieldDomeMesh: THREE.Mesh;
-  shieldCoilMat: THREE.MeshStandardMaterial;
   shieldBeaconMat: THREE.MeshStandardMaterial;
   commsDishPivot: THREE.Group;
   commsBeamMesh: THREE.Mesh;
@@ -252,15 +244,15 @@ export function buildOutpostWorld(
   const terrainTex = createTerrainTexture(site, maxAnisotropy);
   const terrainMat = new THREE.MeshStandardMaterial({
     map: terrainTex,
-    roughness: site === 'europa' ? 0.42 : site === 'moon' ? 0.92 : 0.88,
-    metalness: site === 'europa' ? 0.12 : 0.04,
+    roughness: 0.88,
+    metalness: 0.04,
   });
   const terrainMesh = new THREE.Mesh(planeGeo, terrainMat);
   terrainMesh.receiveShadow = !isSoftwareGl;
   root.add(terrainMesh);
   disposables.push(planeGeo, terrainTex, terrainMat);
 
-  // 2. Instanced Perimeter Rocks
+  // 2. Instanced Perimeter Martian Rocks
   const rockGeo = new THREE.DodecahedronGeometry(0.42, 0);
   const rockMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -287,16 +279,8 @@ export function buildOutpostWorld(
     dummy.updateMatrix();
     rocksMesh.setMatrixAt(i, dummy.matrix);
 
-    if (site === 'moon') {
-      const shade = 0.38 + ((i * 11) % 10) * 0.025;
-      color.setRGB(shade, shade + 0.02, shade + 0.05);
-    } else if (site === 'mars') {
-      const r = 0.52 + ((i * 11) % 10) * 0.025;
-      color.setRGB(r, r * 0.52, r * 0.32);
-    } else {
-      const ice = 0.68 + ((i * 11) % 10) * 0.025;
-      color.setRGB(ice * 0.78, ice * 0.95, ice);
-    }
+    const r = 0.52 + ((i * 11) % 10) * 0.025;
+    color.setRGB(r, r * 0.52, r * 0.32);
     rocksMesh.setColorAt(i, color);
   }
   rocksMesh.instanceMatrix.needsUpdate = true;
@@ -305,34 +289,23 @@ export function buildOutpostWorld(
   root.add(rocksMesh);
   disposables.push(rockGeo, rockMat);
 
-  // 3. Distant Celestial Body (Earth for Moon, Twin Moons Phobos/Deimos for Mars, Jupiter for Europa)
-  const jupiterTex = site === 'europa' ? createJupiterTexture(maxAnisotropy) : null;
-  const planetRadius = site === 'europa' ? 4.2 : site === 'moon' ? 2.1 : 0.95;
-  const planetGeo = new THREE.SphereGeometry(planetRadius, 28, 28);
+  // 3. Distant Martian Moons (Phobos & Deimos)
+  const planetGeo = new THREE.SphereGeometry(0.95, 24, 24);
   const planetMat = new THREE.MeshStandardMaterial({
-    color: site === 'europa' ? 0xffffff : site === 'moon' ? 0x38bdf8 : 0xc2b29b,
-    map: jupiterTex,
-    emissive: site === 'europa' ? 0x3b2416 : site === 'moon' ? 0x0c4a6e : 0x2a1d17,
-    emissiveIntensity: site === 'europa' ? 0.35 : site === 'moon' ? 0.55 : 0.25,
-    roughness: 0.75,
+    color: 0xc2b29b,
+    emissive: 0x2a1d17,
+    emissiveIntensity: 0.25,
+    roughness: 0.78,
   });
   const planetBody = new THREE.Mesh(planetGeo, planetMat);
-  planetBody.position.set(
-    site === 'europa' ? -4.2 : site === 'moon' ? -5.5 : 4.8,
-    site === 'europa' ? 13.5 : 12.5,
-    site === 'europa' ? -26 : -24
-  );
+  planetBody.position.set(4.8, 12.5, -24);
   root.add(planetBody);
-  disposables.push(planetGeo, planetMat);
-  if (jupiterTex) disposables.push(jupiterTex);
 
-  if (site === 'mars') {
-    const deimosGeo = new THREE.SphereGeometry(0.45, 16, 16);
-    const deimos = new THREE.Mesh(deimosGeo, planetMat);
-    deimos.position.set(7.2, 10.6, -24);
-    root.add(deimos);
-    disposables.push(deimosGeo);
-  }
+  const deimosGeo = new THREE.SphereGeometry(0.45, 16, 16);
+  const deimos = new THREE.Mesh(deimosGeo, planetMat);
+  deimos.position.set(7.2, 10.6, -24);
+  root.add(deimos);
+  disposables.push(planetGeo, deimosGeo, planetMat);
 
   // Shared Outpost Materials matching reference palette (warm cream/white composite + dark trim + gold foil)
   const hullCreamMat = new THREE.MeshStandardMaterial({
@@ -802,48 +775,36 @@ export function buildOutpostWorld(
   vestibule.rotation.y = -0.25;
   shieldGroup.add(vestibule);
 
-  // Copper Shield Emitter Coil & Beacon atop the shelter
-  const shieldCoilMat = new THREE.MeshStandardMaterial({
-    color: 0xf59e0b,
-    emissive: 0xd97706,
-    emissiveIntensity: 0.6,
-    roughness: 0.28,
-    metalness: 0.82,
+  // External H2O Water-Wall Shielding Tanks & Roof Dosimeter Sensor (real NASA storm shelter hardware)
+  const waterTankGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.72, 10);
+  const waterTankMat = new THREE.MeshStandardMaterial({
+    color: 0x0284c7,
+    roughness: 0.38,
+    metalness: 0.35,
   });
-  const coilGeo = new THREE.TorusGeometry(0.36, 0.06, 8, 18);
-  coilGeo.rotateX(Math.PI / 2);
-  const coilTop = new THREE.Mesh(coilGeo, shieldCoilMat);
-  coilTop.position.y = 1.62;
-  shieldGroup.add(coilTop);
+  [0.72, 1.04].forEach((tx, idx) => {
+    const wt = new THREE.Mesh(waterTankGeo, waterTankMat);
+    wt.position.set(tx, 0.48, 0.82 - idx * 0.28);
+    wt.castShadow = !isSoftwareGl;
+    shieldGroup.add(wt);
+  });
+
+  const sensorBoxGeo = new THREE.BoxGeometry(0.32, 0.14, 0.28);
+  const sensorBox = new THREE.Mesh(sensorBoxGeo, darkFrameMat);
+  sensorBox.position.y = 1.57;
+  shieldGroup.add(sensorBox);
 
   const shieldBeaconMat = new THREE.MeshStandardMaterial({
     color: 0xfef08a,
     emissive: 0xf59e0b,
-    emissiveIntensity: 1.4,
-    roughness: 0.15,
+    emissiveIntensity: 0.9,
+    roughness: 0.2,
   });
-  const beaconGeo = new THREE.SphereGeometry(0.22, 14, 14);
+  const beaconGeo = new THREE.SphereGeometry(0.085, 10, 10);
   const beacon = new THREE.Mesh(beaconGeo, shieldBeaconMat);
-  beacon.position.y = 1.84;
+  beacon.position.y = 1.7;
   shieldGroup.add(beacon);
 
-  // Protective Translucent Energy Shield Dome over the central interconnected base
-  const shieldDomeGeo = new THREE.SphereGeometry(8.2, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  const shieldDomeMat = new THREE.MeshPhysicalMaterial({
-    color: 0x38bdf8,
-    emissive: 0x0284c7,
-    emissiveIntensity: 0.35,
-    roughness: 0.15,
-    metalness: 0.1,
-    transparent: true,
-    opacity: 0.16,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const shieldDomeMesh = new THREE.Mesh(shieldDomeGeo, shieldDomeMat);
-  shieldDomeMesh.position.set(0.4, 0, -0.2);
-  shieldDomeMesh.renderOrder = 6;
-  root.add(shieldDomeMesh);
   root.add(shieldGroup);
   registerHitbox('shield', modulePositions.shield, 1.5, 2.5);
   disposables.push(
@@ -851,12 +812,11 @@ export function buildOutpostWorld(
     shelterDomeGeo,
     ribGeo,
     vestibuleGeo,
-    shieldCoilMat,
-    coilGeo,
+    waterTankGeo,
+    waterTankMat,
+    sensorBoxGeo,
     shieldBeaconMat,
-    beaconGeo,
-    shieldDomeGeo,
-    shieldDomeMat
+    beaconGeo
   );
 
   // 9. Module 4: Science & Comms Wing (Back-Right) + Crane-Arm Explorer Rover
@@ -1000,8 +960,8 @@ export function buildOutpostWorld(
   const weatherParticleGeo = new THREE.BufferGeometry();
   weatherParticleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
   const weatherParticleMat = new THREE.PointsMaterial({
-    color: site === 'mars' ? 0xfdba74 : site === 'europa' ? 0xbae6fd : 0xfef08a,
-    size: site === 'mars' ? 0.14 : 0.11,
+    color: 0xfdba74,
+    size: 0.14,
     transparent: true,
     opacity: 0.35,
     depthWrite: false,
@@ -1031,9 +991,6 @@ export function buildOutpostWorld(
     o2BubblesGroup,
     greenhouseLedMat,
     greenhousePlants,
-    shieldDomeMat,
-    shieldDomeMesh,
-    shieldCoilMat,
     shieldBeaconMat,
     commsDishPivot,
     commsBeamMesh,

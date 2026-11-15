@@ -162,8 +162,8 @@ export function OutpostCanvas3D({
     renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x070b16);
-    scene.fog = new THREE.FogExp2(0x070b16, 0.025);
+    scene.background = new THREE.Color(0x261410);
+    scene.fog = new THREE.FogExp2(0x261410, 0.024);
 
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envTex = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -192,11 +192,11 @@ export function OutpostCanvas3D({
     };
     controls.addEventListener('start', onOrbitStart);
 
-    // 3-Point Space Lighting Rig
-    const hemiLight = new THREE.HemisphereLight(0x4f6d9a, 0x1e293b, 0.78);
+    // 3-Point Mars Lighting Rig
+    const hemiLight = new THREE.HemisphereLight(0xd98a56, 0x451a0c, 0.78);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff1d6, 2.25);
+    const keyLight = new THREE.DirectionalLight(0xffd8b0, 2.25);
     keyLight.position.set(11, 16, 10);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.set(1024, 1024);
@@ -327,7 +327,6 @@ export function OutpostCanvas3D({
     let disposed = false;
     let roverAngle = 0;
     let ringAlpha = 0;
-    let shieldAlpha = 0.12;
     let beamAlpha = 0;
     let lastPulseNonce = -1;
     let pulseProgress = 1;
@@ -362,32 +361,20 @@ export function OutpostCanvas3D({
         panelsRetracted: retracted,
         commsActive: comms,
         isTitleMode: titleMode,
-        site: curSite,
         pulseEvent: pEvt,
       } = stateRef.current;
       const world = sceneRefs.current?.world;
 
       const simMult = simActive ? 2.4 : 1.0;
 
-      // Atmospheric sky & storm response
-      const targetBg =
-        curSite === 'moon'
-          ? fc.radiationMsv >= 18
-            ? 0x160e18
-            : 0x070b16
-          : curSite === 'europa'
-            ? fc.radiationMsv >= 20
-              ? 0x12182e
-              : 0x061221
-            : fc.dustStormActive
-              ? 0x452212
-              : 0x261410;
+      // Martian sky & dust storm response
+      const targetBg = fc.dustStormActive ? 0x452212 : 0x261410;
       const bgCol = scene.background as THREE.Color;
       _targetBgColor.setHex(targetBg);
       bgCol.lerp(_targetBgColor, 1 - Math.exp(-3 * dt));
       if (scene.fog instanceof THREE.FogExp2) {
         scene.fog.color.copy(bgCol);
-        const targetDensity = curSite === 'mars' && fc.dustStormActive ? 0.044 : 0.024;
+        const targetDensity = fc.dustStormActive ? 0.044 : 0.024;
         scene.fog.density = THREE.MathUtils.damp(scene.fog.density, targetDensity, 3, dt);
       }
 
@@ -439,23 +426,17 @@ export function OutpostCanvas3D({
           dt
         );
 
-        // 4. Radiation Shield Dome & Storm Ripple
+        // 4. Radiation Shelter Dosimeter Beacon (Water-Wall & Regolith Storm Shelter)
         const stormHit = fc.radiationMsv >= 18;
-        const targetShieldAlpha =
-          alloc.shield === 0
-            ? 0.0
-            : 0.09 +
-              alloc.shield * 0.08 +
-              (stormHit ? Math.sin(elapsed * 5) * 0.055 : Math.sin(elapsed * 2.5) * 0.02);
-        shieldAlpha = THREE.MathUtils.damp(shieldAlpha, targetShieldAlpha, 5, dt);
-        world.shieldDomeMat.opacity = shieldAlpha;
-        world.shieldDomeMesh.visible = shieldAlpha > 0.01;
-        world.shieldDomeMat.color.setHex(
-          stormHit && alloc.shield < 2 ? 0xf43f5e : alloc.shield >= 2 ? 0x38bdf8 : 0xf59e0b
+        world.shieldBeaconMat.color.setHex(
+          stormHit && alloc.shield < 2 ? 0xf43f5e : alloc.shield >= 2 ? 0x38bdf8 : 0xfef08a
+        );
+        world.shieldBeaconMat.emissive.setHex(
+          stormHit && alloc.shield < 2 ? 0xe11d48 : alloc.shield >= 2 ? 0x0284c7 : 0xf59e0b
         );
         world.shieldBeaconMat.emissiveIntensity = THREE.MathUtils.damp(
           world.shieldBeaconMat.emissiveIntensity,
-          alloc.shield > 0 ? 0.6 + alloc.shield * 0.55 : 0.1,
+          alloc.shield > 0 ? (stormHit ? 1.15 : 0.45 + alloc.shield * 0.3) : 0.08,
           5,
           dt
         );
@@ -562,16 +543,14 @@ export function OutpostCanvas3D({
           buddy.position.y = Math.abs(Math.sin(elapsed * 2.6 + 1.2)) * 0.025;
         }
 
-        // 8. Atmospheric Weather Particles drift (zero allocations)
+        // 8. Atmospheric Mars Dust / Radiation Particles drift (zero allocations)
         world.weatherParticles.rotation.y += dt * (fc.dustStormActive ? 0.35 : 0.06) * simMult;
         world.weatherParticles.position.y = Math.sin(elapsed * 0.7) * 0.15;
         const targetPartOpacity = fc.dustStormActive
           ? 0.65
           : fc.radiationMsv >= 18
             ? 0.55
-            : curSite === 'europa'
-              ? 0.36
-              : 0.2;
+            : 0.24;
         world.weatherParticleMat.opacity = THREE.MathUtils.damp(
           world.weatherParticleMat.opacity,
           targetPartOpacity,
@@ -579,7 +558,7 @@ export function OutpostCanvas3D({
           dt
         );
         world.weatherParticleMat.color.setHex(
-          fc.radiationMsv >= 18 ? 0xfbbf24 : curSite === 'mars' ? 0xfdba74 : 0xbae6fd
+          fc.radiationMsv >= 18 ? 0xfbbf24 : 0xfdba74
         );
 
         // 9. Active / Hover Selection Ring
@@ -695,45 +674,8 @@ export function OutpostCanvas3D({
     };
   }, []);
 
-  // Swap 3D planet terrain & lighting cleanly when user switches Moon / Mars / Europa
-  useEffect(() => {
-    const refs = sceneRefs.current;
-    if (!refs) return;
-
-    if (refs.world) {
-      refs.scene.remove(refs.world.root);
-      refs.world.disposables.forEach((d) => d.dispose());
-    }
-
-    const nextWorld = buildOutpostWorld(
-      site,
-      refs.renderer.capabilities.getMaxAnisotropy(),
-      refs.shadowTex,
-      refs.isSoftwareGl
-    );
-    refs.scene.add(nextWorld.root);
-    refs.world = nextWorld;
-
-    if (site === 'moon') {
-      refs.hemiLight.color.setHex(0x4f6d9a);
-      refs.hemiLight.groundColor.setHex(0x1e293b);
-      refs.keyLight.color.setHex(0xfff4e0);
-      refs.starPoints.visible = true;
-    } else if (site === 'europa') {
-      refs.hemiLight.color.setHex(0x7dd3fc);
-      refs.hemiLight.groundColor.setHex(0x0f172a);
-      refs.keyLight.color.setHex(0xe0f2fe);
-      refs.starPoints.visible = true;
-    } else {
-      refs.hemiLight.color.setHex(0xd98a56);
-      refs.hemiLight.groundColor.setHex(0x451a0c);
-      refs.keyLight.color.setHex(0xffd8b0);
-      refs.starPoints.visible = true;
-    }
-  }, [site]);
-
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#070B16]">
+    <div className="relative w-full h-full overflow-hidden bg-[#1D0F0B]">
       {/* Isolated Empty WebGL Mount Container */}
       <div ref={mountRef} className="w-full h-full" />
 
