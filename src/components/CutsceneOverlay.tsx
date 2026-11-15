@@ -1,10 +1,12 @@
-import { ArrowRight, SkipForward } from 'lucide-react';
+import { ArrowRight, Radio, SkipForward } from 'lucide-react';
 import type { CutsceneShot } from '../types/game';
 
 interface CutsceneOverlayProps {
   shot: CutsceneShot;
   shotIndex: number;
   totalShots: number;
+  radioTransmitting: boolean;
+  onReplayRadio: () => void;
   onAdvance: () => void;
   onSkipAll: () => void;
 }
@@ -13,6 +15,8 @@ export function CutsceneOverlay({
   shot,
   shotIndex,
   totalShots,
+  radioTransmitting,
+  onReplayRadio,
   onAdvance,
   onSkipAll,
 }: CutsceneOverlayProps) {
@@ -47,14 +51,30 @@ export function CutsceneOverlay({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onSkipAll}
-          className="min-h-[38px] px-3 rounded-lg bg-[#111A2E] hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 shrink-0 cursor-pointer"
-        >
-          <span>Skip</span>
-          <SkipForward className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={onReplayRadio}
+            className={`min-h-[38px] px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors ${
+              radioTransmitting
+                ? 'bg-emerald-950 border-emerald-500/80 text-emerald-300'
+                : 'bg-[#111A2E] hover:bg-slate-800 border-slate-700 text-slate-200'
+            }`}
+            aria-label="Replay Control Center Radio transmission"
+          >
+            <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{radioTransmitting ? 'On Air' : 'Radio'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onSkipAll}
+            className="min-h-[38px] px-3 rounded-lg bg-[#111A2E] hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>Skip</span>
+            <SkipForward className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Bottom Cinema Letterbox Bar + Story Subtitles */}

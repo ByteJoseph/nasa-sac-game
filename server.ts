@@ -2,9 +2,30 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
+
+const radioTtsCache = new Map<string, Buffer>();
+let geminiClient: GoogleGenAI | null = null;
+
+function getGeminiClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') return null;
+  if (!geminiClient) {
+    geminiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        apiVersion: 'v1beta',
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+  }
+  return geminiClient;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -143,6 +164,8 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
   const isProd = process.env.NODE_ENV === 'production';
 
+  app.use(express.json({ limit: '64kb' }));
+
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
   });
@@ -150,6 +173,87 @@ async function startServer() {
   app.get('/api/nasa-weather', async (_req, res) => {
     const snapshot = await getLiveSpaceWeather();
     res.json(snapshot);
+  });
+
+  app.post('/api/radio-voice', async (req, res) => {
+    const rawText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!rawText || rawText.length > 600) {
+      res.status(400).json({ error: 'Invalid radio script text' });
+      return;
+    }
+
+    const cached = radioTtsCache.get(rawText);
+    if (cached) {
+      res.setHeader('Content-Type', 'audio/wav');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(cached);
+      return;
+    }
+
+    const ai = getGeminiClient();
+    if (!ai) {
+      res.status(503).json({ error: 'Gemini TTS unavailable' });
+      return;
+    }
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash-lite-tts',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: rawText,
+                speechMetadata: {
+                  style:
+                    'Warm, calm, natural human male NASA flight controller speaking clearly to a young astronaut over mission radio',
+                },
+              },
+            ],
+          },
+        ],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Charon' },
+            },
+          },
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      const audioPart = parts.find((part) => part.inlineData?.data);
+      const base64Audio = audioPart?.inlineData?.data;
+      if (!base64Audio) {
+        res.status(502).json({ error: 'Empty TTS audio response' });
+        return;
+      }
+
+      const wavBuffer = Buffer.from(base64Audio, 'base64');
+      if (radioTtsCache.size >= 60) {
+        const firstKey = radioTtsCache.keys().next().value;
+        if (firstKey) radioTtsCache.delete(firstKey);
+      }
+      radioTtsCache.set(rawText, wavBuffer);
+
+      res.setHeader('Content-Type', 'audio/wav');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(wavBuffer);
+    } catch (err: unknown) {
+      const errObj = err as { status?: number; message?: string };
+      const statusCode =
+        typeof errObj?.status === 'number' && errObj.status >= 400 && errObj.status < 600
+          ? errObj.status
+          : 502;
+      const safeMessage =
+        typeof errObj?.message === 'string'
+          ? errObj.message.slice(0, 300)
+          : 'Failed to synthesize radio voice';
+      console.error('Gemini radio TTS error:', statusCode, safeMessage);
+      res.status(statusCode).json({ error: safeMessage });
+    }
   });
 
   if (!isProd) {

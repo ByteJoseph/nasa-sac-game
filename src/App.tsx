@@ -24,6 +24,7 @@ import { TitleScreen } from './components/TitleScreen';
 import {
   getChapterIntroCutscene,
   getChoiceOutcomeCutscene,
+  getDilemmaRadioLine,
   getOpeningCutscene,
   getVictoryCutscene,
 } from './data/cutscenes';
@@ -56,6 +57,7 @@ import type {
   SolPhase,
   SpaceWeatherSnapshot,
 } from './types/game';
+import { radioVoice } from './utils/radioVoice';
 import { soundEngine } from './utils/sound';
 
 const DEFAULT_WEATHER: SpaceWeatherSnapshot = {
@@ -207,6 +209,7 @@ export default function App() {
   const [cutsceneIndex, setCutsceneIndex] = useState(0);
   const [cutsceneMode, setCutsceneMode] = useState<'intro' | 'chapter' | 'outcome' | 'victory' | null>(null);
   const [pendingUrgentSec, setPendingUrgentSec] = useState<number | null>(null);
+  const [radioTransmitting, setRadioTransmitting] = useState(false);
 
   const simTimerRef = useRef<number | null>(null);
   const displaySol = MISSION_START_SOL + sol - 1;
@@ -219,7 +222,14 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => clearSimTimer, [clearSimTimer]);
+  useEffect(() => {
+    const unsub = radioVoice.subscribe(setRadioTransmitting);
+    return () => {
+      unsub();
+      clearSimTimer();
+      radioVoice.stop(false);
+    };
+  }, [clearSimTimer]);
 
   // Fetch live space weather on mount
   useEffect(() => {
@@ -271,6 +281,7 @@ export default function App() {
     setMuted((prev) => {
       const next = !prev;
       soundEngine.setMuted(next);
+      radioVoice.setMuted(next);
       return next;
     });
   }, []);
@@ -301,6 +312,7 @@ export default function App() {
   );
 
   const finishCutscene = useCallback(() => {
+    radioVoice.stop(false);
     const mode = cutsceneMode;
     const urgent = pendingUrgentSec;
     setCutsceneShots([]);
@@ -328,6 +340,7 @@ export default function App() {
 
   const advanceCutsceneShot = useCallback(() => {
     if (phase !== 'CUTSCENE') return;
+    radioVoice.stop(false);
     const nextIdx = cutsceneIndex + 1;
     if (nextIdx < cutsceneShots.length) {
       setCutsceneIndex(nextIdx);
@@ -337,20 +350,95 @@ export default function App() {
     }
   }, [phase, cutsceneIndex, cutsceneShots, finishCutscene]);
 
-  // Auto-advance Cutscene shots cleanly when playing
+  const replayCutsceneRadio = useCallback(() => {
+    if (!activeCutsceneShot) return;
+    radioVoice.unlock();
+    radioVoice.speak(activeCutsceneShot.radioLine ?? activeCutsceneShot.caption, {
+      speaker: activeCutsceneShot.speaker.includes('Maya') ? 'maya' : 'control',
+    });
+  }, [activeCutsceneShot]);
+
+  const replayDilemmaRadio = useCallback(() => {
+    if (!activeDilemma) return;
+    radioVoice.unlock();
+    radioVoice.speak(getDilemmaRadioLine(sol, activeDilemma, storyMemory), {
+      speaker: 'control',
+    });
+  }, [sol, activeDilemma, storyMemory]);
+
+  // Play Control Center Radio + wait for both minimum visual shot time and radio explanation
   useEffect(() => {
     if (screen !== 'PLAYING' || phase !== 'CUTSCENE' || !activeCutsceneShot || guideOpen) {
       return;
     }
+    let minDone = false;
+    let voiceDone = false;
+    const maybeAdvance = () => {
+      if (minDone && voiceDone) {
+        advanceCutsceneShot();
+      }
+    };
+
     const timer = window.setTimeout(() => {
-      advanceCutsceneShot();
+      minDone = true;
+      maybeAdvance();
     }, activeCutsceneShot.durationMs);
-    return () => window.clearTimeout(timer);
-  }, [screen, phase, activeCutsceneShot, guideOpen, advanceCutsceneShot]);
+
+    radioVoice.speak(activeCutsceneShot.radioLine ?? activeCutsceneShot.caption, {
+      speaker: activeCutsceneShot.speaker.includes('Maya') ? 'maya' : 'control',
+      onEnd: () => {
+        voiceDone = true;
+        maybeAdvance();
+      },
+    });
+
+    const upcoming: string[] = [];
+    const nextShot = cutsceneShots[cutsceneIndex + 1];
+    if (nextShot) {
+      upcoming.push(nextShot.radioLine ?? nextShot.caption);
+    }
+    if ((cutsceneMode === 'intro' || cutsceneMode === 'chapter') && activeDilemma) {
+      upcoming.push(getDilemmaRadioLine(sol, activeDilemma, storyMemory));
+    }
+    if (upcoming.length > 0) {
+      radioVoice.prefetch(upcoming);
+    }
+
+    return () => {
+      window.clearTimeout(timer);
+      radioVoice.stop(false);
+    };
+  }, [
+    screen,
+    phase,
+    activeCutsceneShot,
+    cutsceneShots,
+    cutsceneIndex,
+    cutsceneMode,
+    activeDilemma,
+    sol,
+    storyMemory,
+    guideOpen,
+    advanceCutsceneShot,
+  ]);
+
+  // Explain each Sol's dilemma scenario over Control Center Radio when opened
+  useEffect(() => {
+    if (screen !== 'PLAYING' || phase !== 'SOL_DILEMMA' || !activeDilemma || guideOpen) {
+      return;
+    }
+    radioVoice.speak(getDilemmaRadioLine(sol, activeDilemma, storyMemory), {
+      speaker: 'control',
+    });
+    return () => {
+      radioVoice.stop(false);
+    };
+  }, [screen, phase, activeDilemma, sol, storyMemory, guideOpen]);
 
   const startMission = useCallback(
     (overrideSite?: OutpostSite, overrideDiff?: DifficultyMode) => {
       clearSimTimer();
+      radioVoice.unlock();
       const targetSite = overrideSite ?? site;
       const targetDiff = overrideDiff ?? difficulty;
       const initialForecast = buildSolForecast(1, targetSite, targetDiff, weather);
@@ -361,6 +449,7 @@ export default function App() {
         weather,
         INITIAL_STORY_MEMORY
       );
+      const openingShots = getOpeningCutscene(weather);
       setSol(1);
       setSelectedModule('scrubber');
       setPanelsRetracted(false);
@@ -382,7 +471,11 @@ export default function App() {
       setFailureReason('');
       setCommsSecondsLeft(864);
       setScreen('PLAYING');
-      startCutscene(getOpeningCutscene(weather), 'intro', firstChapter.urgentSeconds ?? null);
+      radioVoice.prefetch([
+        ...openingShots.slice(1).map((s) => s.radioLine ?? s.caption),
+        getDilemmaRadioLine(1, firstChapter, INITIAL_STORY_MEMORY),
+      ]);
+      startCutscene(openingShots, 'intro', firstChapter.urgentSeconds ?? null);
     },
     [site, difficulty, weather, clearSimTimer, startCutscene]
   );
@@ -841,6 +934,8 @@ export default function App() {
             shot={activeCutsceneShot}
             shotIndex={cutsceneIndex}
             totalShots={cutsceneShots.length}
+            radioTransmitting={radioTransmitting}
+            onReplayRadio={replayCutsceneRadio}
             onAdvance={advanceCutsceneShot}
             onSkipAll={finishCutscene}
           />
@@ -892,12 +987,27 @@ export default function App() {
                     <h2 className="font-display font-bold text-sm text-white leading-tight">
                       {activeDilemma.title}
                     </h2>
-                    {activeDilemma.requiresCommsDelay && (
-                      <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300 shrink-0">
-                        <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-                        {`${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {activeDilemma.requiresCommsDelay && (
+                        <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300">
+                          <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                          {`${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={replayDilemmaRadio}
+                        className={`min-h-[36px] px-2.5 rounded-lg border text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
+                          radioTransmitting
+                            ? 'bg-emerald-950 border-emerald-500/80 text-emerald-300'
+                            : 'bg-[#162033] hover:bg-slate-800 border-slate-700 text-slate-200'
+                        }`}
+                        aria-label="Replay Control Center radio briefing"
+                      >
+                        <Radio className="w-3 h-3" aria-hidden="true" />
+                        <span>{radioTransmitting ? 'On Air' : 'Radio'}</span>
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-slate-200 leading-snug mt-1">
                     {activeDilemma.briefing}{' '}

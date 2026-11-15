@@ -27,6 +27,7 @@ export interface CutsceneShot {
   durationMs: number;
   speaker: string;
   caption: string;
+  radioLine?: string;
   dustBoost?: boolean;
   flareBoost?: boolean;
   commsBeamBoost?: boolean;

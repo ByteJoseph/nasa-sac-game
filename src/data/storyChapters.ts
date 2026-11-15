@@ -71,7 +71,7 @@ export function buildStoryChapterDilemma(
       siteFilter: site,
       urgentSeconds: 10,
       briefing:
-        'A fast-moving Martian iron-dust storm just rolled across Jezero rim! Your solar wings are about to get buried or sandblasted. Decide in 10 seconds:',
+        'A fast Martian dust storm is about to hit your solar panels! Decide in 10 seconds:',
       nasaCitation: 'NASA Mars 2020 Perseverance MEDA Dust & Solar Array Survival',
       options: [
         {
@@ -120,8 +120,8 @@ export function buildStoryChapterDilemma(
       category: 'Life Support',
       siteFilter: site,
       briefing: memory.retractedPanelsOn214
-        ? 'Maya unfolded clean solar panels at dawn, but last night’s power loss left the O₂ scrubber cold and sluggish. How should she recover?'
-        : 'Last night’s storm coated the exposed panels in fine grit and stressed a power relay. Maya needs a fast fix before noon:',
+        ? 'Solar panels stayed clean, but last night left the O₂ scrubber cold and sluggish.'
+        : 'Storm dust coated the solar panels and cut your power output.',
       nasaCitation: 'NASA ECLSS & Electrostatic Dust Mitigation',
       options: [
         {
@@ -178,7 +178,7 @@ export function buildStoryChapterDilemma(
       category: 'Solar Weather',
       siteFilter: site,
       urgentSeconds: 10,
-      briefing: `${liveTag} spots fast radiation particles racing toward Maya! You have 10 seconds to shield the habitat:`,
+      briefing: `${liveTag} spots a solar radiation wave hitting Mars! Shield the base in 10 seconds:`,
       nasaCitation: 'NASA DONKI Space Weather Database & OSDR Dosimetry',
       options: [
         {
@@ -225,7 +225,7 @@ export function buildStoryChapterDilemma(
       requiresCommsDelay: true,
       commsDelayLabel: delayDesc,
       urgentSeconds: 10,
-      briefing: `Mars dust jammed the Greenhouse airlock seal! ${delayDesc} Maya has to make the call right now:`,
+      briefing: `Greenhouse airlock leak! ${delayDesc} Decide right now:`,
       nasaCitation: 'NASA Deep Space Network & Autonomous Mars Operations',
       options: [
         {
@@ -268,7 +268,7 @@ export function buildStoryChapterDilemma(
       category: 'Biology & Food',
       siteFilter: site,
       briefing:
-        'Maya’s dwarf tomatoes and leafy greens are blooming inside the geodesic farm! Boosting LEDs brings fresh meals, while freezing leaves aids NASA’s DNA study:',
+        'Greenhouse crops are blooming! Boost LEDs for fresh food, or dim them to save power and freeze samples:',
       nasaCitation: 'NASA OSDR Spaceflight Plant Biology (VEGGIE)',
       options: [
         {
@@ -311,7 +311,7 @@ export function buildStoryChapterDilemma(
       category: 'Rover Science',
       siteFilter: site,
       briefing:
-        'Scanners spotted an ancient Jezero riverbed outcrop just beyond the rover path! Should Maya suit up for a final EVA or stay indoors to rest?',
+        'Ancient riverbed rocks spotted outside! Keep Maya resting before landing, or send her on a rock-core EVA:',
       nasaCitation: 'NASA OSDR Crew Health & EVA Radiation Management',
       options: [
         {
@@ -353,7 +353,7 @@ export function buildStoryChapterDilemma(
     category: 'Comms Delay',
     siteFilter: site,
     briefing:
-      'The cargo & relief lander is descending toward Pad 1! Maya can either fire full radar beacons to guide a rich science drop or cut all non-essential power for a safe landing.',
+      'Relief lander descending to Pad 1! Cut lab power for a safe radar landing, or run full dust sensors:',
     nasaCitation: 'NASA Mars Precision Landing & Hazard Avoidance',
     options: [
       {
