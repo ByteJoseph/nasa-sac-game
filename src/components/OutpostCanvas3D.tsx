@@ -394,7 +394,7 @@ export function OutpostCanvas3D({
       if (world) {
         // 1. Solar Array tilt, retraction during storms & brightness
         const targetTilt = retracted ? 1.54 : fc.lunarShadowDip ? 0.15 : 0.48;
-        const targetWingY = retracted ? 0.54 : 0.78;
+        const targetWingY = retracted ? 0.96 : 1.28;
         world.solarPanelWings.forEach((wing) => {
           wing.rotation.x = THREE.MathUtils.damp(wing.rotation.x, targetTilt, 4.5, dt);
           wing.position.y = THREE.MathUtils.damp(wing.position.y, targetWingY, 4.5, dt);
@@ -419,7 +419,7 @@ export function OutpostCanvas3D({
             const phase = (b.userData.phase as number) || 0;
             const cycle =
               ((elapsed * (0.7 + alloc.scrubber * 0.25) * simMult + phase) % 1.4) / 1.4;
-            b.position.y = 1.45 + cycle * 1.1;
+            b.position.y = 1.95 + cycle * 1.25;
             b.scale.setScalar(Math.sin(cycle * Math.PI) * 1.15 + 0.15);
           });
         }
@@ -501,10 +501,10 @@ export function OutpostCanvas3D({
           | undefined;
 
         if (titleMode) {
-          _astroGoal.set(-0.55, 0, 3.45);
+          _astroGoal.set(-0.55, 0, 3.65);
         } else {
           const mPos = world.modulePositions[selMod];
-          _astroGoal.set(mPos.x * 0.62, 0, Math.min(4.2, mPos.z * 0.62 + 1.55));
+          _astroGoal.set(mPos.x * 0.62, 0, Math.min(4.2, mPos.z * 0.62 + 1.65));
         }
         const distSq =
           (hero.position.x - _astroGoal.x) * (hero.position.x - _astroGoal.x) +
@@ -636,7 +636,7 @@ export function OutpostCanvas3D({
             return;
           }
           const mPos = world.modulePositions[key];
-          _projVec.set(mPos.x, 2.05, mPos.z);
+          _projVec.set(mPos.x, 2.55, mPos.z);
           _projVec.project(camera);
           if (_projVec.z > 1) {
             btn.style.opacity = '0';

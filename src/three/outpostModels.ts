@@ -103,10 +103,10 @@ function addCorrugatedTunnel(
 
   const group = new THREE.Group();
   const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
-  group.position.set(mid.x, 0.42, mid.z);
+  group.position.set(mid.x, 0.7, mid.z);
   group.rotation.y = Math.atan2(dir.x, dir.z);
 
-  const tubeGeo = new THREE.CylinderGeometry(0.32, 0.32, len, 12);
+  const tubeGeo = new THREE.CylinderGeometry(0.46, 0.46, len, 12);
   tubeGeo.rotateX(Math.PI / 2);
   const tube = new THREE.Mesh(tubeGeo, hullMat);
   tube.castShadow = !isSoftwareGl;
@@ -114,8 +114,8 @@ function addCorrugatedTunnel(
   group.add(tube);
   disposables.push(tubeGeo);
 
-  const ringGeo = new THREE.TorusGeometry(0.34, 0.035, 6, 14);
-  const ringCount = Math.max(2, Math.floor(len / 0.55));
+  const ringGeo = new THREE.TorusGeometry(0.49, 0.045, 6, 14);
+  const ringCount = Math.max(2, Math.floor(len / 0.6));
   for (let i = 1; i < ringCount; i++) {
     const r = new THREE.Mesh(ringGeo, ringMat);
     r.position.z = -len / 2 + (i / ringCount) * len;
@@ -412,10 +412,10 @@ export function buildOutpostWorld(
     isSoftwareGl,
     disposables
   );
-  astro1.scale.setScalar(1.58);
-  astro1.position.set(-0.55, 0, 3.45);
+  astro1.scale.setScalar(1.08);
+  astro1.position.set(-0.55, 0, 3.65);
   astro1.rotation.y = 0.2;
-  addContactShadow(astro1, 0.45, shadowTex, disposables);
+  addContactShadow(astro1, 0.36, shadowTex, disposables);
 
   const astro2 = buildAstronaut(
     hullWhiteMat,
@@ -426,45 +426,45 @@ export function buildOutpostWorld(
     isSoftwareGl,
     disposables
   );
-  astro2.scale.setScalar(1.2);
-  astro2.position.set(0.6, 0, 5.15);
+  astro2.scale.setScalar(0.95);
+  astro2.position.set(0.6, 0, 5.25);
   astro2.rotation.y = -0.25;
-  addContactShadow(astro2, 0.38, shadowTex, disposables);
+  addContactShadow(astro2, 0.32, shadowTex, disposables);
   root.add(astro1, astro2);
 
   // 4. Central Octagonal Command Hub (connects all modules)
   const hubPos = new THREE.Vector3(0, 0, -0.6);
   const hubGroup = new THREE.Group();
   hubGroup.position.copy(hubPos);
-  addContactShadow(hubGroup, 2.1, shadowTex, disposables);
+  addContactShadow(hubGroup, 2.25, shadowTex, disposables);
 
-  const hubBaseGeo = new THREE.CylinderGeometry(1.48, 1.65, 0.22, 8);
+  const hubBaseGeo = new THREE.CylinderGeometry(1.62, 1.78, 0.32, 8);
   const hubBase = new THREE.Mesh(hubBaseGeo, darkFrameMat);
-  hubBase.position.y = 0.11;
+  hubBase.position.y = 0.16;
   hubBase.receiveShadow = true;
   hubGroup.add(hubBase);
 
-  const hubBodyGeo = new THREE.CylinderGeometry(1.32, 1.48, 0.66, 8);
+  const hubBodyGeo = new THREE.CylinderGeometry(1.48, 1.62, 1.18, 8);
   const hubBody = new THREE.Mesh(hubBodyGeo, hullCreamMat);
-  hubBody.position.y = 0.55;
+  hubBody.position.y = 0.91;
   hubBody.castShadow = !isSoftwareGl;
   hubBody.receiveShadow = true;
   hubGroup.add(hubBody);
 
-  const hubCupolaGeo = new THREE.CylinderGeometry(0.68, 1.05, 0.26, 8);
+  const hubCupolaGeo = new THREE.CylinderGeometry(0.84, 1.28, 0.46, 8);
   const hubCupola = new THREE.Mesh(hubCupolaGeo, hullWhiteMat);
-  hubCupola.position.y = 1.0;
+  hubCupola.position.y = 1.73;
   hubGroup.add(hubCupola);
 
   // Central Lattice Comms Mast behind the hub
-  const mastGeo = new THREE.CylinderGeometry(0.05, 0.12, 2.4, 6);
+  const mastGeo = new THREE.CylinderGeometry(0.06, 0.14, 2.9, 6);
   const mast = new THREE.Mesh(mastGeo, darkFrameMat);
-  mast.position.set(0.25, 1.9, -1.25);
+  mast.position.set(0.25, 2.85, -1.25);
   mast.castShadow = !isSoftwareGl;
   hubGroup.add(mast);
 
-  const dishMinGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.08, 10);
-  [1.6, 2.1, 2.6].forEach((dy) => {
+  const dishMinGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.09, 10);
+  [2.4, 3.05, 3.7].forEach((dy) => {
     const disc = new THREE.Mesh(dishMinGeo, hullWhiteMat);
     disc.position.set(0.25, dy, -1.25);
     hubGroup.add(disc);
@@ -493,20 +493,20 @@ export function buildOutpostWorld(
   // 4-Legged Supply Lander perched on Pad 1
   const landerGroup = new THREE.Group();
   landerGroup.position.set(-6.8, 0.16, 1.0);
-  const landerDeckGeo = new THREE.CylinderGeometry(0.45, 0.52, 0.28, 8);
+  const landerDeckGeo = new THREE.CylinderGeometry(0.58, 0.68, 0.46, 8);
   const landerDeck = new THREE.Mesh(landerDeckGeo, brushedGoldMat);
-  landerDeck.position.y = 0.46;
+  landerDeck.position.y = 0.82;
   landerDeck.castShadow = !isSoftwareGl;
-  const landerCabGeo = new THREE.CylinderGeometry(0.32, 0.42, 0.36, 8);
+  const landerCabGeo = new THREE.CylinderGeometry(0.42, 0.54, 0.58, 8);
   const landerCab = new THREE.Mesh(landerCabGeo, hullWhiteMat);
-  landerCab.position.y = 0.78;
+  landerCab.position.y = 1.34;
   landerCab.castShadow = !isSoftwareGl;
   landerGroup.add(landerDeck, landerCab);
 
-  const strutGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.55, 6);
+  const strutGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.88, 6);
   [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2].forEach((a) => {
     const leg = new THREE.Mesh(strutGeo, darkFrameMat);
-    leg.position.set(Math.cos(a) * 0.48, 0.24, Math.sin(a) * 0.48);
+    leg.position.set(Math.cos(a) * 0.62, 0.4, Math.sin(a) * 0.62);
     leg.rotation.z = Math.cos(a) * 0.45;
     leg.rotation.x = -Math.sin(a) * 0.45;
     landerGroup.add(leg);
@@ -517,7 +517,7 @@ export function buildOutpostWorld(
   // Clickable Module Coordinates (widely spaced around Central Hub with longer connecting tunnels!)
   const modulePositions: Record<ModuleKey, THREE.Vector3> = {
     scrubber: new THREE.Vector3(-3.35, 0, 1.65),
-    shield: new THREE.Vector3(1.15, 0, 2.35),
+    shield: new THREE.Vector3(1.25, 0, 2.65),
     greenhouse: new THREE.Vector3(4.65, 0, 0.65),
     lab: new THREE.Vector3(2.65, 0, -3.25),
   };
@@ -531,7 +531,11 @@ export function buildOutpostWorld(
   addCorrugatedTunnel(root, hubPos, rearDomePos, hullCreamMat, darkFrameMat, isSoftwareGl, disposables);
 
   // Rear-Left Geodesic Biodome (Visual completeness matching reference photo)
-  const rearGeo = new THREE.SphereGeometry(1.12, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const rearRingGeo = new THREE.CylinderGeometry(1.36, 1.44, 0.42, 18);
+  const rearRing = new THREE.Mesh(rearRingGeo, hullCreamMat);
+  rearRing.position.set(rearDomePos.x, 0.21, rearDomePos.z);
+  rearRing.receiveShadow = true;
+  const rearGeo = new THREE.SphereGeometry(1.32, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5);
   const rearGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xcbd5e1,
     roughness: 0.2,
@@ -544,11 +548,11 @@ export function buildOutpostWorld(
     wireframe: true,
   });
   const rearDome = new THREE.Mesh(rearGeo, rearGlassMat);
-  rearDome.position.set(rearDomePos.x, 0.12, rearDomePos.z);
+  rearDome.position.set(rearDomePos.x, 0.42, rearDomePos.z);
   const rearWire = new THREE.Mesh(rearGeo, rearWireMat);
-  rearWire.position.set(rearDomePos.x, 0.13, rearDomePos.z);
-  root.add(rearDome, rearWire);
-  disposables.push(rearGeo, rearGlassMat, rearWireMat);
+  rearWire.position.set(rearDomePos.x, 0.43, rearDomePos.z);
+  root.add(rearRing, rearDome, rearWire);
+  disposables.push(rearRingGeo, rearGeo, rearGlassMat, rearWireMat);
 
   // 5. Dual Solar Panel Arrays (Behind Hub & Front-Right behind Rover)
   const solarTex = createSolarGridTexture(maxAnisotropy);
@@ -565,16 +569,16 @@ export function buildOutpostWorld(
     const bank = new THREE.Group();
     bank.position.set(bx, 0, bz);
     bank.rotation.y = rotY;
-    const postGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.75, 8);
+    const postGeo = new THREE.CylinderGeometry(0.07, 0.09, 1.25, 8);
     const postL = new THREE.Mesh(postGeo, darkFrameMat);
-    postL.position.set(-0.7, 0.38, 0);
+    postL.position.set(-0.7, 0.62, 0);
     const postR = new THREE.Mesh(postGeo, darkFrameMat);
-    postR.position.set(0.7, 0.38, 0);
+    postR.position.set(0.7, 0.62, 0);
     bank.add(postL, postR);
 
-    const wingGeo = new THREE.BoxGeometry(2.1, 0.05, 0.95);
+    const wingGeo = new THREE.BoxGeometry(2.2, 0.06, 1.05);
     const wing = new THREE.Mesh(wingGeo, solarPanelMat);
-    wing.position.y = 0.78;
+    wing.position.y = 1.28;
     wing.rotation.x = 0.48;
     wing.castShadow = !isSoftwareGl;
     bank.add(wing);
@@ -604,37 +608,37 @@ export function buildOutpostWorld(
   // 6. Module 1: Crew Hab & O2 Scrubber Octagon (Front-Left)
   const scrubberGroup = new THREE.Group();
   scrubberGroup.position.copy(modulePositions.scrubber);
-  addContactShadow(scrubberGroup, 1.65, shadowTex, disposables);
+  addContactShadow(scrubberGroup, 1.75, shadowTex, disposables);
 
-  const habOctGeo = new THREE.CylinderGeometry(1.12, 1.24, 0.85, 8);
+  const habOctGeo = new THREE.CylinderGeometry(1.22, 1.34, 1.24, 8);
   const habOct = new THREE.Mesh(habOctGeo, hullCreamMat);
-  habOct.position.y = 0.44;
+  habOct.position.y = 0.62;
   habOct.castShadow = !isSoftwareGl;
   habOct.receiveShadow = true;
   scrubberGroup.add(habOct);
 
-  const habRoofGeo = new THREE.CylinderGeometry(0.75, 1.12, 0.22, 8);
+  const habRoofGeo = new THREE.CylinderGeometry(0.8, 1.22, 0.36, 8);
   const habRoof = new THREE.Mesh(habRoofGeo, hullWhiteMat);
-  habRoof.position.y = 0.96;
+  habRoof.position.y = 1.42;
   scrubberGroup.add(habRoof);
 
-  const habPorchGeo = new THREE.BoxGeometry(0.55, 0.62, 0.65);
+  const habPorchGeo = new THREE.BoxGeometry(0.62, 1.02, 0.72);
   const habPorch = new THREE.Mesh(habPorchGeo, hullCreamMat);
-  habPorch.position.set(-0.35, 0.32, 1.05);
+  habPorch.position.set(-0.35, 0.51, 1.12);
   habPorch.rotation.y = -0.3;
   scrubberGroup.add(habPorch);
 
   // Twin O2 Electrolysis Tanks
-  const tankGeo = new THREE.CapsuleGeometry(0.16, 0.48, 6, 10);
+  const tankGeo = new THREE.CapsuleGeometry(0.19, 0.7, 6, 10);
   const tankMat = new THREE.MeshStandardMaterial({
     color: 0x06b6d4,
     roughness: 0.3,
     metalness: 0.6,
   });
   const tank1 = new THREE.Mesh(tankGeo, tankMat);
-  tank1.position.set(0.95, 0.45, 0.65);
+  tank1.position.set(1.04, 0.6, 0.72);
   const tank2 = new THREE.Mesh(tankGeo, tankMat);
-  tank2.position.set(1.22, 0.45, 0.42);
+  tank2.position.set(1.32, 0.6, 0.48);
   scrubberGroup.add(tank1, tank2);
 
   // Glowing Cyan/Amber Hab Porthole Windows
@@ -644,16 +648,16 @@ export function buildOutpostWorld(
     emissiveIntensity: 1.1,
     roughness: 0.15,
   });
-  const winGeo = new THREE.BoxGeometry(0.24, 0.22, 0.1);
-  [0.18, 0.58].forEach((wx) => {
+  const winGeo = new THREE.BoxGeometry(0.26, 0.28, 0.1);
+  [0.18, 0.6].forEach((wx) => {
     const w = new THREE.Mesh(winGeo, scrubberWindowsMat);
-    w.position.set(wx, 0.55, 1.12);
+    w.position.set(wx, 0.78, 1.22);
     scrubberGroup.add(w);
   });
 
   // Animated rising 3D O2 bubbles
   const o2BubblesGroup = new THREE.Group();
-  const bubbleGeo = new THREE.SphereGeometry(0.1, 10, 10);
+  const bubbleGeo = new THREE.SphereGeometry(0.11, 10, 10);
   const bubbleMat = new THREE.MeshStandardMaterial({
     color: 0x67e8f9,
     emissive: 0x22d3ee,
@@ -662,13 +666,13 @@ export function buildOutpostWorld(
   });
   for (let b = 0; b < 4; b++) {
     const bubble = new THREE.Mesh(bubbleGeo, bubbleMat);
-    bubble.position.set(-0.3 + b * 0.22, 1.3 + (b % 2) * 0.3, (b % 2 === 0 ? 1 : -1) * 0.2);
+    bubble.position.set(-0.3 + b * 0.22, 1.85 + (b % 2) * 0.3, (b % 2 === 0 ? 1 : -1) * 0.2);
     bubble.userData.phase = b * 1.55;
     o2BubblesGroup.add(bubble);
   }
   scrubberGroup.add(o2BubblesGroup);
   root.add(scrubberGroup);
-  registerHitbox('scrubber', modulePositions.scrubber, 1.45, 2.0);
+  registerHitbox('scrubber', modulePositions.scrubber, 1.55, 2.5);
   disposables.push(
     habOctGeo,
     habRoofGeo,
@@ -684,15 +688,15 @@ export function buildOutpostWorld(
   // 7. Module 2: Geodesic Glass Hydroponic Greenhouse Dome (Right)
   const greenhouseGroup = new THREE.Group();
   greenhouseGroup.position.copy(modulePositions.greenhouse);
-  addContactShadow(greenhouseGroup, 1.85, shadowTex, disposables);
+  addContactShadow(greenhouseGroup, 1.95, shadowTex, disposables);
 
-  const ghRingGeo = new THREE.CylinderGeometry(1.48, 1.58, 0.22, 20);
+  const ghRingGeo = new THREE.CylinderGeometry(1.6, 1.7, 0.46, 20);
   const ghRing = new THREE.Mesh(ghRingGeo, hullCreamMat);
-  ghRing.position.y = 0.11;
+  ghRing.position.y = 0.23;
   ghRing.receiveShadow = true;
   greenhouseGroup.add(ghRing);
 
-  const ghDomeGeo = new THREE.SphereGeometry(1.42, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const ghDomeGeo = new THREE.SphereGeometry(1.56, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
   const ghGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xd1fae5,
     roughness: 0.12,
@@ -704,7 +708,7 @@ export function buildOutpostWorld(
     depthWrite: false,
   });
   const ghGlass = new THREE.Mesh(ghDomeGeo, ghGlassMat);
-  ghGlass.position.y = 0.2;
+  ghGlass.position.y = 0.44;
   ghGlass.renderOrder = 4;
   greenhouseGroup.add(ghGlass);
 
@@ -714,7 +718,7 @@ export function buildOutpostWorld(
     wireframe: true,
   });
   const ghWireHemi = new THREE.Mesh(ghDomeGeo, ghLatticeMat);
-  ghWireHemi.position.y = 0.21;
+  ghWireHemi.position.y = 0.45;
   greenhouseGroup.add(ghWireHemi);
 
   // Overhead Hydroponic Grow LED Ring
@@ -724,15 +728,15 @@ export function buildOutpostWorld(
     emissiveIntensity: 1.0,
     roughness: 0.25,
   });
-  const ledGeo = new THREE.TorusGeometry(0.65, 0.05, 8, 18);
+  const ledGeo = new THREE.TorusGeometry(0.75, 0.055, 8, 18);
   ledGeo.rotateX(Math.PI / 2);
   const ledRing = new THREE.Mesh(ledGeo, greenhouseLedMat);
-  ledRing.position.y = 1.05;
+  ledRing.position.y = 1.42;
   greenhouseGroup.add(ledRing);
 
   // Lush Green Hydroponic Crop Beds inside
   const greenhousePlants = new THREE.Group();
-  const cropGeo = new THREE.SphereGeometry(0.24, 10, 10);
+  const cropGeo = new THREE.SphereGeometry(0.28, 10, 10);
   const cropMat = new THREE.MeshStandardMaterial({
     color: 0x22c55e,
     roughness: 0.72,
@@ -741,17 +745,17 @@ export function buildOutpostWorld(
   for (let angle = 0; angle < 6; angle++) {
     const a = (angle / 6) * Math.PI * 2;
     const plant = new THREE.Mesh(cropGeo, cropMat);
-    plant.position.set(Math.cos(a) * 0.68, 0.42, Math.sin(a) * 0.68);
-    plant.scale.set(1.1, 0.8, 1.1);
+    plant.position.set(Math.cos(a) * 0.74, 0.68, Math.sin(a) * 0.74);
+    plant.scale.set(1.1, 0.85, 1.1);
     greenhousePlants.add(plant);
   }
   const centerCrop = new THREE.Mesh(cropGeo, cropMat);
-  centerCrop.position.set(0, 0.48, 0);
-  centerCrop.scale.set(1.4, 0.9, 1.4);
+  centerCrop.position.set(0, 0.75, 0);
+  centerCrop.scale.set(1.4, 0.95, 1.4);
   greenhousePlants.add(centerCrop);
   greenhouseGroup.add(greenhousePlants);
   root.add(greenhouseGroup);
-  registerHitbox('greenhouse', modulePositions.greenhouse, 1.65, 2.0);
+  registerHitbox('greenhouse', modulePositions.greenhouse, 1.75, 2.5);
   disposables.push(
     ghRingGeo,
     ghDomeGeo,
@@ -766,29 +770,35 @@ export function buildOutpostWorld(
   // 8. Module 3: Ribbed Regolith Radiation Shelter Dome + Overarching Shield (Front-Center-Right)
   const shieldGroup = new THREE.Group();
   shieldGroup.position.copy(modulePositions.shield);
-  addContactShadow(shieldGroup, 1.55, shadowTex, disposables);
+  addContactShadow(shieldGroup, 1.65, shadowTex, disposables);
+
+  const shelterBaseGeo = new THREE.CylinderGeometry(1.22, 1.32, 0.36, 16);
+  const shelterBase = new THREE.Mesh(shelterBaseGeo, hullCreamMat);
+  shelterBase.position.y = 0.18;
+  shelterBase.receiveShadow = true;
+  shieldGroup.add(shelterBase);
 
   // Ribbed Inflatable / 3D-printed Shelter Dome
-  const shelterDomeGeo = new THREE.SphereGeometry(1.08, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const shelterDomeGeo = new THREE.SphereGeometry(1.2, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
   const shelterDome = new THREE.Mesh(shelterDomeGeo, hullCreamMat);
-  shelterDome.position.y = 0.08;
+  shelterDome.position.y = 0.34;
   shelterDome.castShadow = !isSoftwareGl;
   shelterDome.receiveShadow = true;
   shieldGroup.add(shelterDome);
 
   // Radial Inflatable Ribs around dome
-  const ribGeo = new THREE.TorusGeometry(1.09, 0.04, 6, 16, Math.PI);
+  const ribGeo = new THREE.TorusGeometry(1.21, 0.045, 6, 16, Math.PI);
   for (let r = 0; r < 6; r++) {
     const rib = new THREE.Mesh(ribGeo, hullWhiteMat);
-    rib.position.y = 0.08;
+    rib.position.y = 0.34;
     rib.rotation.y = (r / 6) * Math.PI;
     shieldGroup.add(rib);
   }
 
   // Front rectangular airlock vestibule
-  const vestibuleGeo = new THREE.BoxGeometry(0.56, 0.66, 0.68);
+  const vestibuleGeo = new THREE.BoxGeometry(0.62, 1.04, 0.72);
   const vestibule = new THREE.Mesh(vestibuleGeo, hullCreamMat);
-  vestibule.position.set(-0.22, 0.34, 0.98);
+  vestibule.position.set(-0.22, 0.52, 1.06);
   vestibule.rotation.y = -0.25;
   shieldGroup.add(vestibule);
 
@@ -800,10 +810,10 @@ export function buildOutpostWorld(
     roughness: 0.28,
     metalness: 0.82,
   });
-  const coilGeo = new THREE.TorusGeometry(0.32, 0.055, 8, 18);
+  const coilGeo = new THREE.TorusGeometry(0.36, 0.06, 8, 18);
   coilGeo.rotateX(Math.PI / 2);
   const coilTop = new THREE.Mesh(coilGeo, shieldCoilMat);
-  coilTop.position.y = 1.24;
+  coilTop.position.y = 1.62;
   shieldGroup.add(coilTop);
 
   const shieldBeaconMat = new THREE.MeshStandardMaterial({
@@ -812,13 +822,13 @@ export function buildOutpostWorld(
     emissiveIntensity: 1.4,
     roughness: 0.15,
   });
-  const beaconGeo = new THREE.SphereGeometry(0.2, 14, 14);
+  const beaconGeo = new THREE.SphereGeometry(0.22, 14, 14);
   const beacon = new THREE.Mesh(beaconGeo, shieldBeaconMat);
-  beacon.position.y = 1.42;
+  beacon.position.y = 1.84;
   shieldGroup.add(beacon);
 
   // Protective Translucent Energy Shield Dome over the central interconnected base
-  const shieldDomeGeo = new THREE.SphereGeometry(7.8, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const shieldDomeGeo = new THREE.SphereGeometry(8.2, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
   const shieldDomeMat = new THREE.MeshPhysicalMaterial({
     color: 0x38bdf8,
     emissive: 0x0284c7,
@@ -835,8 +845,9 @@ export function buildOutpostWorld(
   shieldDomeMesh.renderOrder = 6;
   root.add(shieldDomeMesh);
   root.add(shieldGroup);
-  registerHitbox('shield', modulePositions.shield, 1.4, 2.0);
+  registerHitbox('shield', modulePositions.shield, 1.5, 2.5);
   disposables.push(
+    shelterBaseGeo,
     shelterDomeGeo,
     ribGeo,
     vestibuleGeo,
@@ -851,40 +862,45 @@ export function buildOutpostWorld(
   // 9. Module 4: Science & Comms Wing (Back-Right) + Crane-Arm Explorer Rover
   const labGroup = new THREE.Group();
   labGroup.position.copy(modulePositions.lab);
-  addContactShadow(labGroup, 1.5, shadowTex, disposables);
+  addContactShadow(labGroup, 1.65, shadowTex, disposables);
 
-  const labOctGeo = new THREE.CylinderGeometry(1.05, 1.15, 0.78, 8);
+  const labOctGeo = new THREE.CylinderGeometry(1.16, 1.28, 1.2, 8);
   const labOct = new THREE.Mesh(labOctGeo, hullCreamMat);
-  labOct.position.y = 0.4;
+  labOct.position.y = 0.6;
   labOct.castShadow = !isSoftwareGl;
   labOct.receiveShadow = true;
   labGroup.add(labOct);
 
-  const labWinGeo = new THREE.BoxGeometry(0.38, 0.2, 0.1);
+  const labRoofGeo = new THREE.CylinderGeometry(0.76, 1.16, 0.32, 8);
+  const labRoof = new THREE.Mesh(labRoofGeo, hullWhiteMat);
+  labRoof.position.y = 1.36;
+  labGroup.add(labRoof);
+
+  const labWinGeo = new THREE.BoxGeometry(0.42, 0.26, 0.1);
   const labWin = new THREE.Mesh(labWinGeo, warmWinMat);
-  labWin.position.set(0, 0.48, 1.05);
+  labWin.position.set(0, 0.72, 1.16);
   labGroup.add(labWin);
 
   // Deep-Space Parabolic Comms Dish atop Science Pod
   const commsDishPivot = new THREE.Group();
-  commsDishPivot.position.set(0.32, 0.85, -0.15);
-  const dishMastGeo = new THREE.CylinderGeometry(0.06, 0.09, 0.45, 8);
+  commsDishPivot.position.set(0.32, 1.54, -0.15);
+  const dishMastGeo = new THREE.CylinderGeometry(0.07, 0.1, 0.5, 8);
   const dishMast = new THREE.Mesh(dishMastGeo, darkFrameMat);
-  dishMast.position.y = 0.22;
+  dishMast.position.y = 0.25;
   commsDishPivot.add(dishMast);
 
   const dishPoints = [
     new THREE.Vector2(0.02, 0),
-    new THREE.Vector2(0.32, 0.08),
-    new THREE.Vector2(0.58, 0.26),
+    new THREE.Vector2(0.36, 0.09),
+    new THREE.Vector2(0.64, 0.29),
   ];
   const dishGeo = new THREE.LatheGeometry(dishPoints, 18);
   const dishMesh = new THREE.Mesh(dishGeo, hullWhiteMat);
-  dishMesh.position.y = 0.48;
+  dishMesh.position.y = 0.54;
   dishMesh.rotation.x = 0.65;
   commsDishPivot.add(dishMesh);
 
-  const commsBeamGeo = new THREE.ConeGeometry(0.85, 6.5, 16, 1, true);
+  const commsBeamGeo = new THREE.ConeGeometry(0.9, 6.5, 16, 1, true);
   commsBeamGeo.translate(0, 3.25, 0);
   const commsBeamMat = new THREE.MeshBasicMaterial({
     color: 0xf59e0b,
@@ -894,14 +910,14 @@ export function buildOutpostWorld(
     side: THREE.DoubleSide,
   });
   const commsBeamMesh = new THREE.Mesh(commsBeamGeo, commsBeamMat);
-  commsBeamMesh.position.y = 0.55;
+  commsBeamMesh.position.y = 0.62;
   commsBeamMesh.rotation.x = 0.65;
   commsDishPivot.add(commsBeamMesh);
 
   labGroup.add(commsDishPivot);
   root.add(labGroup);
-  registerHitbox('lab', modulePositions.lab, 1.45, 2.0);
-  disposables.push(labOctGeo, labWinGeo, dishMastGeo, dishGeo, commsBeamGeo, commsBeamMat);
+  registerHitbox('lab', modulePositions.lab, 1.55, 2.5);
+  disposables.push(labOctGeo, labRoofGeo, labWinGeo, dishMastGeo, dishGeo, commsBeamGeo, commsBeamMat);
 
   // 10. 6-Wheel Pressurized Rover with Articulated Crane Arm (Foreground Right)
   const roverGroup = new THREE.Group();
