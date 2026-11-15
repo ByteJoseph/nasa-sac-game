@@ -96,6 +96,20 @@ class SoundEngine {
   public playCountdownTick(urgent: boolean): void {
     this.playTone(urgent ? 880 : 620, 0.06, 'sine', urgent ? 0.06 : 0.035);
   }
+
+  public playCutsceneCue(mood: 'calm' | 'alert' | 'triumph' = 'calm'): void {
+    if (mood === 'alert') {
+      this.playTone(196, 0.28, 'sawtooth', 0.045, 0, 146.8);
+      this.playTone(293.66, 0.22, 'triangle', 0.04, 0.08);
+    } else if (mood === 'triumph') {
+      this.playTone(440, 0.22, 'triangle', 0.06, 0);
+      this.playTone(554.37, 0.24, 'triangle', 0.06, 0.09);
+      this.playTone(659.25, 0.34, 'sine', 0.07, 0.18);
+    } else {
+      this.playTone(329.63, 0.24, 'sine', 0.055, 0);
+      this.playTone(493.88, 0.3, 'sine', 0.05, 0.1);
+    }
+  }
 }
 
 export const soundEngine = new SoundEngine();

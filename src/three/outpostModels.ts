@@ -53,6 +53,10 @@ export interface Outpost3DRefs {
   pulseRingMat: THREE.MeshBasicMaterial;
   weatherParticles: THREE.Points;
   weatherParticleMat: THREE.PointsMaterial;
+  supplyLanderGroup: THREE.Group;
+  landerFlameMesh: THREE.Mesh;
+  landerFlameMat: THREE.MeshBasicMaterial;
+  pad1BeaconMat: THREE.MeshBasicMaterial;
   astronauts: THREE.Group[];
   heroAstronaut: THREE.Group;
   clickableTargets: THREE.Mesh[];
@@ -463,29 +467,81 @@ export function buildOutpostWorld(
   root.add(pad1, pad2);
   disposables.push(padTex, padTopMat, padGeo);
 
-  // 4-Legged Supply Lander perched on Pad 1
-  const landerGroup = new THREE.Group();
-  landerGroup.position.set(-6.8, 0.16, 1.0);
-  const landerDeckGeo = new THREE.CylinderGeometry(0.58, 0.68, 0.46, 8);
-  const landerDeck = new THREE.Mesh(landerDeckGeo, brushedGoldMat);
-  landerDeck.position.y = 0.82;
-  landerDeck.castShadow = !isSoftwareGl;
-  const landerCabGeo = new THREE.CylinderGeometry(0.42, 0.54, 0.58, 8);
-  const landerCab = new THREE.Mesh(landerCabGeo, hullWhiteMat);
-  landerCab.position.y = 1.34;
-  landerCab.castShadow = !isSoftwareGl;
-  landerGroup.add(landerDeck, landerCab);
+  // Pad 1 Active Landing Beacon Ring (waiting for Sol 220 Supply Lander)
+  const pad1BeaconGeo = new THREE.RingGeometry(1.18, 1.38, 24);
+  pad1BeaconGeo.rotateX(-Math.PI / 2);
+  const pad1BeaconMat = new THREE.MeshBasicMaterial({
+    color: 0xf59e0b,
+    transparent: true,
+    opacity: 0.55,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const pad1Beacon = new THREE.Mesh(pad1BeaconGeo, pad1BeaconMat);
+  pad1Beacon.position.set(-6.8, 0.175, 1.0);
+  root.add(pad1Beacon);
+  disposables.push(pad1BeaconGeo, pad1BeaconMat);
 
+  // Shared Lander Geometries
+  const landerDeckGeo = new THREE.CylinderGeometry(0.58, 0.68, 0.46, 8);
+  const landerCabGeo = new THREE.CylinderGeometry(0.42, 0.54, 0.58, 8);
   const strutGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.88, 6);
+
+  // Docked Crew Ascent Craft parked on Pad 2
+  const ascentLander = new THREE.Group();
+  ascentLander.position.set(-7.1, 0.16, -2.9);
+  const ascentDeck = new THREE.Mesh(landerDeckGeo, brushedGoldMat);
+  ascentDeck.position.y = 0.82;
+  ascentDeck.castShadow = !isSoftwareGl;
+  const ascentCab = new THREE.Mesh(landerCabGeo, hullWhiteMat);
+  ascentCab.position.y = 1.34;
+  ascentCab.castShadow = !isSoftwareGl;
+  ascentLander.add(ascentDeck, ascentCab);
   [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2].forEach((a) => {
     const leg = new THREE.Mesh(strutGeo, darkFrameMat);
     leg.position.set(Math.cos(a) * 0.62, 0.4, Math.sin(a) * 0.62);
     leg.rotation.z = Math.cos(a) * 0.45;
     leg.rotation.x = -Math.sin(a) * 0.45;
-    landerGroup.add(leg);
+    ascentLander.add(leg);
   });
-  root.add(landerGroup);
-  disposables.push(landerDeckGeo, landerCabGeo, strutGeo);
+  root.add(ascentLander);
+
+  // Sol 220 Descending Relief Supply Lander (targets Pad 1)
+  const supplyLanderGroup = new THREE.Group();
+  supplyLanderGroup.position.set(-6.8, 10.5, 1.0);
+  supplyLanderGroup.visible = false;
+  const supplyDeck = new THREE.Mesh(landerDeckGeo, brushedGoldMat);
+  supplyDeck.position.y = 0.88;
+  supplyDeck.castShadow = !isSoftwareGl;
+  const supplyCab = new THREE.Mesh(landerCabGeo, hullWhiteMat);
+  supplyCab.position.y = 1.4;
+  supplyCab.scale.set(1.12, 1.15, 1.12);
+  supplyCab.castShadow = !isSoftwareGl;
+  const nozzleGeo = new THREE.CylinderGeometry(0.14, 0.24, 0.24, 10);
+  const nozzle = new THREE.Mesh(nozzleGeo, darkFrameMat);
+  nozzle.position.y = 0.56;
+  const flameGeo = new THREE.ConeGeometry(0.32, 1.65, 12);
+  flameGeo.rotateX(Math.PI);
+  flameGeo.translate(0, -0.35, 0);
+  const landerFlameMat = new THREE.MeshBasicMaterial({
+    color: 0xfbbf24,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+  });
+  const landerFlameMesh = new THREE.Mesh(flameGeo, landerFlameMat);
+  landerFlameMesh.position.y = 0.48;
+  landerFlameMesh.visible = false;
+  supplyLanderGroup.add(supplyDeck, supplyCab, nozzle, landerFlameMesh);
+  [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2].forEach((a) => {
+    const leg = new THREE.Mesh(strutGeo, darkFrameMat);
+    leg.position.set(Math.cos(a) * 0.66, 0.44, Math.sin(a) * 0.66);
+    leg.rotation.z = Math.cos(a) * 0.45;
+    leg.rotation.x = -Math.sin(a) * 0.45;
+    supplyLanderGroup.add(leg);
+  });
+  root.add(supplyLanderGroup);
+  disposables.push(landerDeckGeo, landerCabGeo, strutGeo, nozzleGeo, flameGeo, landerFlameMat);
 
   // Clickable Module Coordinates (widely spaced around Central Hub with longer connecting tunnels!)
   const modulePositions: Record<ModuleKey, THREE.Vector3> = {
@@ -1003,6 +1059,10 @@ export function buildOutpostWorld(
     pulseRingMat,
     weatherParticles,
     weatherParticleMat,
+    supplyLanderGroup,
+    landerFlameMesh,
+    landerFlameMat,
+    pad1BeaconMat,
     astronauts: [astro1, astro2],
     heroAstronaut: astro1,
     clickableTargets,

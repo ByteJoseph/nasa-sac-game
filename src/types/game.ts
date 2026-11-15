@@ -6,7 +6,33 @@ export type DifficultyMode = 'cadet' | 'commander';
 
 export type ModuleKey = 'scrubber' | 'greenhouse' | 'shield' | 'lab';
 
-export type SolPhase = 'ALLOCATE_POWER' | 'SIMULATING_SOL' | 'SOL_DILEMMA' | 'SOL_OUTCOME';
+export type SolPhase = 'CUTSCENE' | 'SIMULATING_SOL' | 'SOL_DILEMMA' | 'SOL_OUTCOME';
+
+export type CutscenePreset =
+  | 'none'
+  | 'intro_outpost'
+  | 'intro_dust_wall'
+  | 'solar_arrays'
+  | 'o2_dome'
+  | 'farm_dome'
+  | 'shelter_water'
+  | 'comms_dish'
+  | 'rover_eva'
+  | 'lander_descent'
+  | 'victory_celebration';
+
+export interface CutsceneShot {
+  id: string;
+  preset: CutscenePreset;
+  durationMs: number;
+  speaker: string;
+  caption: string;
+  dustBoost?: boolean;
+  flareBoost?: boolean;
+  commsBeamBoost?: boolean;
+  landerDescending?: boolean;
+  mood?: 'calm' | 'alert' | 'triumph';
+}
 
 export interface CoreResources {
   power: number; // 0 - 100

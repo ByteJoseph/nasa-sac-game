@@ -105,6 +105,15 @@
   animation: shield-pulse 2.2s ease-in-out infinite;
 }
 
+@keyframes cutsceneBar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-slow-pan,
   .animate-float-bubble,

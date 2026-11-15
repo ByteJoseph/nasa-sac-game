@@ -5,10 +5,8 @@ import {
   BookOpen,
   Clock,
   FlaskConical,
-  Minus,
   Pause,
   Play,
-  Plus,
   Radio,
   RotateCcw,
   Sprout,
@@ -17,11 +15,18 @@ import {
   Wind,
   Zap,
 } from 'lucide-react';
+import { CutsceneOverlay } from './components/CutsceneOverlay';
 import { GlossaryTerm } from './components/GlossaryTerm';
 import { MissionEndModal } from './components/MissionEndModal';
 import { NasaGuideModal } from './components/NasaGuideModal';
 import { OutpostCanvas3D, type PulseEvent } from './components/OutpostCanvas3D';
 import { TitleScreen } from './components/TitleScreen';
+import {
+  getChapterIntroCutscene,
+  getChoiceOutcomeCutscene,
+  getOpeningCutscene,
+  getVictoryCutscene,
+} from './data/cutscenes';
 import { buildSolForecast, SITE_PROFILES } from './data/nasaScienceData';
 import {
   buildStoryChapterDilemma,
@@ -38,6 +43,7 @@ import {
 } from './engine/simulation';
 import type {
   CoreResources,
+  CutsceneShot,
   DifficultyMode,
   DilemmaCard,
   DilemmaOption,
@@ -160,6 +166,14 @@ function getDeltaChips(deltas: ResourceDeltas): Array<{ label: string; positive:
     }));
 }
 
+const ZERO_DELTAS: ResourceDeltas = {
+  power: 0,
+  oxygen: 0,
+  food: 0,
+  health: 0,
+  science: 0,
+};
+
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('TITLE_MENU');
   const site: OutpostSite = 'mars';
@@ -170,7 +184,7 @@ export default function App() {
 
   // Active Story State
   const [sol, setSol] = useState(1);
-  const [phase, setPhase] = useState<SolPhase>('ALLOCATE_POWER');
+  const [phase, setPhase] = useState<SolPhase>('SOL_DILEMMA');
   const [selectedModule, setSelectedModule] = useState<ModuleKey>('scrubber');
   const [pulseEvent, setPulseEvent] = useState<PulseEvent | null>(null);
   const [panelsRetracted, setPanelsRetracted] = useState(false);
@@ -181,6 +195,7 @@ export default function App() {
   const [allocation, setAllocation] = useState<ModuleAllocation>(INITIAL_ALLOCATION);
   const [activeDilemma, setActiveDilemma] = useState<DilemmaCard | null>(null);
   const [chosenOption, setChosenOption] = useState<DilemmaOption | null>(null);
+  const [lastPowerDeltas, setLastPowerDeltas] = useState<ResourceDeltas>(ZERO_DELTAS);
   const [outcomeNotes, setOutcomeNotes] = useState<string[]>([]);
   const [solNetDeltas, setSolNetDeltas] = useState<ResourceDeltas | null>(null);
   const [simPopups, setSimPopups] = useState<Array<{ label: string; positive: boolean }>>([]);
@@ -188,9 +203,14 @@ export default function App() {
   const [failureReason, setFailureReason] = useState('');
   const [commsSecondsLeft, setCommsSecondsLeft] = useState(0);
   const [urgentSecondsLeft, setUrgentSecondsLeft] = useState<number | null>(null);
+  const [cutsceneShots, setCutsceneShots] = useState<CutsceneShot[]>([]);
+  const [cutsceneIndex, setCutsceneIndex] = useState(0);
+  const [cutsceneMode, setCutsceneMode] = useState<'intro' | 'chapter' | 'outcome' | 'victory' | null>(null);
+  const [pendingUrgentSec, setPendingUrgentSec] = useState<number | null>(null);
 
   const simTimerRef = useRef<number | null>(null);
   const displaySol = MISSION_START_SOL + sol - 1;
+  const activeCutsceneShot = phase === 'CUTSCENE' ? cutsceneShots[cutsceneIndex] ?? null : null;
 
   const clearSimTimer = useCallback(() => {
     if (simTimerRef.current !== null) {
@@ -222,15 +242,19 @@ export default function App() {
     [sol, site, difficulty, weather]
   );
 
-  const predictedPowerDeltas = useMemo(
-    () => calculatePowerAllocationDeltas(allocation, forecast, site, difficulty),
-    [allocation, forecast, site, difficulty]
+  const nextSolForecast = useMemo(
+    () =>
+      sol < TOTAL_SOLS
+        ? buildSolForecast(sol + 1, site, difficulty, weather)
+        : forecast,
+    [sol, site, difficulty, weather, forecast]
   );
 
+  const activeBudgetForecast = phase === 'SOL_OUTCOME' ? nextSolForecast : forecast;
   const usedPowerUnits = getModuleUsedPower(allocation);
-  const maxAllowedUnits = forecast.solarBudget + (resources.power >= 20 ? 2 : 0);
-  const remainingSolarBars = Math.max(0, forecast.solarBudget - usedPowerUnits);
-  const overdrivenBars = Math.max(0, usedPowerUnits - forecast.solarBudget);
+  const maxAllowedUnits = activeBudgetForecast.solarBudget + (resources.power >= 20 ? 2 : 0);
+  const remainingSolarBars = Math.max(0, activeBudgetForecast.solarBudget - usedPowerUnits);
+  const overdrivenBars = Math.max(0, usedPowerUnits - activeBudgetForecast.solarBudget);
 
   // Light-time comms countdown ticker
   useEffect(() => {
@@ -259,13 +283,85 @@ export default function App() {
     });
   }, []);
 
+  const startCutscene = useCallback(
+    (
+      shots: CutsceneShot[],
+      mode: 'intro' | 'chapter' | 'outcome' | 'victory',
+      urgentAfter: number | null = null
+    ) => {
+      setCutsceneShots(shots);
+      setCutsceneIndex(0);
+      setCutsceneMode(mode);
+      setPendingUrgentSec(urgentAfter);
+      setUrgentSecondsLeft(null);
+      setPhase('CUTSCENE');
+      soundEngine.playCutsceneCue(shots[0]?.mood ?? 'calm');
+    },
+    []
+  );
+
+  const finishCutscene = useCallback(() => {
+    const mode = cutsceneMode;
+    const urgent = pendingUrgentSec;
+    setCutsceneShots([]);
+    setCutsceneIndex(0);
+    setCutsceneMode(null);
+    setPendingUrgentSec(null);
+
+    if (mode === 'victory') {
+      setScreen('MISSION_COMPLETE');
+      soundEngine.playVictory();
+      return;
+    }
+
+    if (mode === 'outcome') {
+      setPhase('SOL_OUTCOME');
+      soundEngine.playChoiceConfirm();
+      return;
+    }
+
+    // 'intro' or 'chapter' transitions directly into the Sol's Dilemma (with 10s timer if urgent!)
+    setUrgentSecondsLeft(urgent);
+    setPhase('SOL_DILEMMA');
+    soundEngine.playDilemmaAlert(Boolean(urgent));
+  }, [cutsceneMode, pendingUrgentSec]);
+
+  const advanceCutsceneShot = useCallback(() => {
+    if (phase !== 'CUTSCENE') return;
+    const nextIdx = cutsceneIndex + 1;
+    if (nextIdx < cutsceneShots.length) {
+      setCutsceneIndex(nextIdx);
+      soundEngine.playCutsceneCue(cutsceneShots[nextIdx]?.mood ?? 'calm');
+    } else {
+      finishCutscene();
+    }
+  }, [phase, cutsceneIndex, cutsceneShots, finishCutscene]);
+
+  // Auto-advance Cutscene shots cleanly when playing
+  useEffect(() => {
+    if (screen !== 'PLAYING' || phase !== 'CUTSCENE' || !activeCutsceneShot || guideOpen) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      advanceCutsceneShot();
+    }, activeCutsceneShot.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [screen, phase, activeCutsceneShot, guideOpen, advanceCutsceneShot]);
+
   const startMission = useCallback(
     (overrideSite?: OutpostSite, overrideDiff?: DifficultyMode) => {
       clearSimTimer();
       const targetSite = overrideSite ?? site;
       const targetDiff = overrideDiff ?? difficulty;
+      const initialForecast = buildSolForecast(1, targetSite, targetDiff, weather);
+      const firstChapter = buildStoryChapterDilemma(
+        1,
+        targetSite,
+        initialForecast,
+        weather,
+        INITIAL_STORY_MEMORY
+      );
       setSol(1);
-      setPhase('ALLOCATE_POWER');
       setSelectedModule('scrubber');
       setPanelsRetracted(false);
       setStoryMemory(INITIAL_STORY_MEMORY);
@@ -276,23 +372,24 @@ export default function App() {
         shield: 1,
         lab: 1,
       });
-      setActiveDilemma(null);
+      setActiveDilemma(firstChapter);
       setChosenOption(null);
+      setLastPowerDeltas(ZERO_DELTAS);
       setOutcomeNotes([]);
       setSolNetDeltas(null);
       setSimPopups([]);
       setLogs([]);
       setFailureReason('');
-      setUrgentSecondsLeft(null);
+      setCommsSecondsLeft(864);
       setScreen('PLAYING');
-      soundEngine.playSolLaunch();
+      startCutscene(getOpeningCutscene(weather), 'intro', firstChapter.urgentSeconds ?? null);
     },
-    [site, difficulty, clearSimTimer]
+    [site, difficulty, weather, clearSimTimer, startCutscene]
   );
 
   const adjustModulePower = useCallback(
     (key: ModuleKey, delta: number) => {
-      if (phase !== 'ALLOCATE_POWER' || screen !== 'PLAYING') return;
+      if (phase !== 'SOL_OUTCOME' || screen !== 'PLAYING') return;
       setAllocation((prev) => {
         const currentVal = prev[key];
         const nextVal = Math.max(0, Math.min(3, currentVal + delta));
@@ -311,13 +408,8 @@ export default function App() {
 
   const handleTap3DModule = useCallback(
     (key: ModuleKey) => {
-      if (phase !== 'ALLOCATE_POWER' || screen !== 'PLAYING') return;
-      if (selectedModule !== key) {
-        setSelectedModule(key);
-        triggerPulse(key);
-        soundEngine.playPowerAdjust(allocation[key]);
-        return;
-      }
+      if (phase !== 'SOL_OUTCOME' || screen !== 'PLAYING') return;
+      setSelectedModule(key);
       setAllocation((prev) => {
         const currentVal = prev[key];
         let nextVal = (currentVal + 1) % 4;
@@ -330,7 +422,7 @@ export default function App() {
         return { ...prev, [key]: nextVal };
       });
     },
-    [phase, screen, selectedModule, allocation, maxAllowedUnits, triggerPulse]
+    [phase, screen, maxAllowedUnits, triggerPulse]
   );
 
   const checkFailure = useCallback((nextRes: CoreResources): string | null => {
@@ -343,49 +435,6 @@ export default function App() {
     return null;
   }, []);
 
-  const handleRunSolPower = useCallback(() => {
-    if (phase !== 'ALLOCATE_POWER' || screen !== 'PLAYING') return;
-
-    const { next, secondaryNotes } = applyDeltas(resources, predictedPowerDeltas);
-    setResources(next);
-    setOutcomeNotes(secondaryNotes);
-    setSimPopups(getDeltaChips(predictedPowerDeltas));
-    setPhase('SIMULATING_SOL');
-    soundEngine.playSolLaunch();
-
-    clearSimTimer();
-    simTimerRef.current = window.setTimeout(() => {
-      simTimerRef.current = null;
-      const failMsg = checkFailure(next);
-      if (failMsg) {
-        setFailureReason(failMsg);
-        setScreen('MISSION_FAILED');
-        soundEngine.playFailure();
-        return;
-      }
-
-      const chapter = buildStoryChapterDilemma(sol, site, forecast, weather, storyMemory);
-      setActiveDilemma(chapter);
-      setCommsSecondsLeft(864);
-      setUrgentSecondsLeft(chapter.urgentSeconds ?? null);
-      setSimPopups([]);
-      setPhase('SOL_DILEMMA');
-      soundEngine.playDilemmaAlert(forecast.radiationMsv >= 18 || Boolean(chapter.urgentSeconds));
-    }, 1150);
-  }, [
-    phase,
-    screen,
-    resources,
-    predictedPowerDeltas,
-    clearSimTimer,
-    checkFailure,
-    sol,
-    site,
-    forecast,
-    weather,
-    storyMemory,
-  ]);
-
   const handleResolveDilemma = useCallback(
     (option: DilemmaOption, timedOut = false) => {
       if (phase !== 'SOL_DILEMMA' || screen !== 'PLAYING' || !activeDilemma) return;
@@ -395,25 +444,26 @@ export default function App() {
         setPanelsRetracted(option.retractPanels);
       }
 
-      setStoryMemory((prev) => ({
-        ...prev,
+      const nextMemory: StoryMemory = {
+        ...storyMemory,
         retractedPanelsOn214:
-          sol === 1 ? Boolean(option.retractPanels) : prev.retractedPanelsOn214,
+          sol === 1 ? Boolean(option.retractPanels) : storyMemory.retractedPanelsOn214,
         waterShieldedFlare:
-          option.id === 'flood-water-shield' ? true : prev.waterShieldedFlare,
-        actedWithoutEarth: option.id === 'maya-acts-now' ? true : prev.actedWithoutEarth,
-        wentOnEva: option.id === 'hero-eva-expedition' ? true : prev.wentOnEva,
-      }));
+          option.id === 'flood-water-shield' ? true : storyMemory.waterShieldedFlare,
+        actedWithoutEarth: option.id === 'maya-acts-now' ? true : storyMemory.actedWithoutEarth,
+        wentOnEva: option.id === 'hero-eva-expedition' ? true : storyMemory.wentOnEva,
+      };
+      setStoryMemory(nextMemory);
 
       const { next, secondaryNotes } = applyDeltas(resources, option.deltas);
       const timeoutPrefix = timedOut ? ['Time ran out! Using fallback plan.'] : [];
       const combinedNotes = [...timeoutPrefix, ...outcomeNotes, ...secondaryNotes];
       const combinedDeltas: ResourceDeltas = {
-        power: predictedPowerDeltas.power + option.deltas.power,
-        oxygen: predictedPowerDeltas.oxygen + option.deltas.oxygen,
-        food: predictedPowerDeltas.food + option.deltas.food,
-        health: predictedPowerDeltas.health + option.deltas.health,
-        science: predictedPowerDeltas.science + option.deltas.science,
+        power: lastPowerDeltas.power + option.deltas.power,
+        oxygen: lastPowerDeltas.oxygen + option.deltas.oxygen,
+        food: lastPowerDeltas.food + option.deltas.food,
+        health: lastPowerDeltas.health + option.deltas.health,
+        science: lastPowerDeltas.science + option.deltas.science,
       };
 
       setResources(next);
@@ -440,20 +490,21 @@ export default function App() {
         return;
       }
 
-      setPhase('SOL_OUTCOME');
-      soundEngine.playChoiceConfirm();
+      startCutscene(getChoiceOutcomeCutscene(sol, option, nextMemory), 'outcome', null);
     },
     [
       phase,
       screen,
       activeDilemma,
       sol,
+      storyMemory,
       resources,
       outcomeNotes,
-      predictedPowerDeltas,
+      lastPowerDeltas,
       displaySol,
       forecast.title,
       checkFailure,
+      startCutscene,
     ]
   );
 
@@ -489,15 +540,15 @@ export default function App() {
     if (phase !== 'SOL_OUTCOME' || screen !== 'PLAYING') return;
 
     if (sol >= TOTAL_SOLS) {
-      setScreen('MISSION_COMPLETE');
-      soundEngine.playVictory();
+      startCutscene(getVictoryCutscene(), 'victory', null);
       return;
     }
 
     const nextSol = sol + 1;
     const nextForecast = buildSolForecast(nextSol, site, difficulty, weather);
+    const nextMaxUnits = nextForecast.solarBudget + (resources.power >= 20 ? 2 : 0);
     const nextAlloc = { ...allocation };
-    while (getModuleUsedPower(nextAlloc) > nextForecast.solarBudget) {
+    while (getModuleUsedPower(nextAlloc) > nextMaxUnits) {
       if (nextAlloc.lab > 0) nextAlloc.lab -= 1;
       else if (nextAlloc.greenhouse > 0) nextAlloc.greenhouse -= 1;
       else if (nextAlloc.shield > 0) nextAlloc.shield -= 1;
@@ -505,17 +556,64 @@ export default function App() {
       else break;
     }
 
+    const powerDeltas = calculatePowerAllocationDeltas(nextAlloc, nextForecast, site, difficulty);
+    const { next, secondaryNotes } = applyDeltas(resources, powerDeltas);
+
     setSol(nextSol);
     setPanelsRetracted(false);
     setAllocation(nextAlloc);
+    setResources(next);
+    setLastPowerDeltas(powerDeltas);
+    setOutcomeNotes(secondaryNotes);
+    setSimPopups(getDeltaChips(powerDeltas));
     setActiveDilemma(null);
     setChosenOption(null);
-    setOutcomeNotes([]);
     setSolNetDeltas(null);
     setUrgentSecondsLeft(null);
-    setPhase('ALLOCATE_POWER');
+    setPhase('SIMULATING_SOL');
     soundEngine.playSolLaunch();
-  }, [phase, screen, sol, site, difficulty, weather, allocation]);
+
+    clearSimTimer();
+    simTimerRef.current = window.setTimeout(() => {
+      simTimerRef.current = null;
+      const failMsg = checkFailure(next);
+      if (failMsg) {
+        setFailureReason(failMsg);
+        setScreen('MISSION_FAILED');
+        soundEngine.playFailure();
+        return;
+      }
+
+      const chapter = buildStoryChapterDilemma(
+        nextSol,
+        site,
+        nextForecast,
+        weather,
+        storyMemory
+      );
+      setActiveDilemma(chapter);
+      setCommsSecondsLeft(864);
+      setSimPopups([]);
+      startCutscene(
+        getChapterIntroCutscene(nextSol, nextForecast, storyMemory),
+        'chapter',
+        chapter.urgentSeconds ?? null
+      );
+    }, 900);
+  }, [
+    phase,
+    screen,
+    sol,
+    site,
+    difficulty,
+    weather,
+    resources,
+    allocation,
+    storyMemory,
+    clearSimTimer,
+    checkFailure,
+    startCutscene,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -544,19 +642,22 @@ export default function App() {
         return;
       }
 
-      if (screen === 'PLAYING') {
-        if (phase === 'ALLOCATE_POWER') {
-          if (e.key === '1') setSelectedModule('scrubber');
-          if (e.key === '2') setSelectedModule('greenhouse');
-          if (e.key === '3') setSelectedModule('shield');
-          if (e.key === '4') setSelectedModule('lab');
-          if (e.key === '+' || e.key === '=') adjustModulePower(selectedModule, 1);
-          if (e.key === '-' || e.key === '_') adjustModulePower(selectedModule, -1);
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleRunSolPower();
-          }
-        } else if (phase === 'SOL_OUTCOME' && (e.key === 'Enter' || e.key === ' ')) {
+      if (screen === 'PLAYING' && phase === 'CUTSCENE') {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          advanceCutsceneShot();
+        }
+        return;
+      }
+
+      if (screen === 'PLAYING' && phase === 'SOL_OUTCOME') {
+        if (e.key === '1') setSelectedModule('scrubber');
+        if (e.key === '2') setSelectedModule('greenhouse');
+        if (e.key === '3') setSelectedModule('shield');
+        if (e.key === '4') setSelectedModule('lab');
+        if (e.key === '+' || e.key === '=') adjustModulePower(selectedModule, 1);
+        if (e.key === '-' || e.key === '_') adjustModulePower(selectedModule, -1);
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           handleNextSol();
         }
@@ -572,8 +673,8 @@ export default function App() {
     selectedModule,
     toggleMute,
     startMission,
+    advanceCutsceneShot,
     adjustModulePower,
-    handleRunSolPower,
     handleNextSol,
   ]);
 
@@ -583,16 +684,6 @@ export default function App() {
     if (!activeDilemma) return [];
     return [activeDilemma.options[0], activeDilemma.options[2]];
   }, [activeDilemma]);
-
-  // Ultra-short 1-line kid prompt for Maya
-  const kidPrompt =
-    forecast.radiationMsv >= 18
-      ? `Solar storm (${forecast.flareClass})! Boost Shield!`
-      : forecast.dustStormActive
-        ? `Dusty sky! Only ${forecast.solarBudget} Solar bars.`
-        : sol === 1
-          ? `Tap any building to power it, then hit Go!`
-          : `Ready for Sol ${displaySol}! Set your power.`;
 
   return (
     <div className="w-screen h-dvh overflow-hidden bg-[#04070F] flex items-center justify-center">
@@ -604,7 +695,8 @@ export default function App() {
           allocation={allocation}
           selectedModule={selectedModule}
           forecast={forecast}
-          canEditPower={screen === 'PLAYING' && phase === 'ALLOCATE_POWER'}
+          solNumber={sol}
+          canEditPower={screen === 'PLAYING' && phase === 'SOL_OUTCOME'}
           isSimulating={screen === 'PLAYING' && phase === 'SIMULATING_SOL'}
           panelsRetracted={panelsRetracted}
           commsActive={
@@ -613,12 +705,26 @@ export default function App() {
             Boolean(activeDilemma?.requiresCommsDelay)
           }
           isTitleMode={screen === 'TITLE_MENU'}
+          cutscenePreset={
+            screen === 'PLAYING' && activeCutsceneShot ? activeCutsceneShot.preset : 'none'
+          }
+          cutsceneShotKey={activeCutsceneShot ? activeCutsceneShot.id : ''}
+          cutsceneFlags={
+            activeCutsceneShot
+              ? {
+                  dustBoost: activeCutsceneShot.dustBoost,
+                  flareBoost: activeCutsceneShot.flareBoost,
+                  commsBeamBoost: activeCutsceneShot.commsBeamBoost,
+                  landerDescending: activeCutsceneShot.landerDescending,
+                }
+              : undefined
+          }
           pulseEvent={pulseEvent}
           onTapModule={handleTap3DModule}
         />
 
-        {/* Lean Floating Top HUD */}
-        {screen !== 'TITLE_MENU' && (
+        {/* Lean Floating Top HUD (hidden during cut scenes) */}
+        {screen !== 'TITLE_MENU' && phase !== 'CUTSCENE' && (
           <header className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-[#070B16]/95 via-[#070B16]/75 to-transparent px-3 pt-2.5 pb-4 space-y-1.5 pointer-events-auto">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 min-w-0 text-xs">
@@ -729,8 +835,19 @@ export default function App() {
           </div>
         )}
 
+        {/* Cinematic Cut Scene Overlay */}
+        {screen === 'PLAYING' && phase === 'CUTSCENE' && activeCutsceneShot && (
+          <CutsceneOverlay
+            shot={activeCutsceneShot}
+            shotIndex={cutsceneIndex}
+            totalShots={cutsceneShots.length}
+            onAdvance={advanceCutsceneShot}
+            onSkipAll={finishCutscene}
+          />
+        )}
+
         {/* LIGHTWEIGHT FLOATING STORY CARD AT BOTTOM */}
-        {screen === 'PLAYING' && (
+        {screen === 'PLAYING' && phase !== 'CUTSCENE' && (
           <div className="absolute bottom-3 inset-x-3 z-20 pointer-events-auto">
             {phase === 'SIMULATING_SOL' ? (
               <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 px-4 py-3 shadow-2xl space-y-2">
@@ -739,112 +856,6 @@ export default function App() {
                 </p>
                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full bg-amber-400 rounded-full w-full transition-transform duration-1000 origin-left" />
-                </div>
-              </div>
-            ) : phase === 'ALLOCATE_POWER' ? (
-              <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 p-3 shadow-2xl space-y-2.5">
-                {/* Row 1: Maya 1-Liner + Simple Solar Count */}
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-slate-100 truncate">
-                    <span className="text-amber-300 font-bold">Maya:</span> {kidPrompt}
-                  </p>
-                  <span
-                    className={`text-[11px] font-mono font-bold tabular-nums shrink-0 ${
-                      overdrivenBars > 0
-                        ? 'text-rose-300'
-                        : remainingSolarBars > 0
-                          ? 'text-emerald-300'
-                          : 'text-amber-300'
-                    }`}
-                  >
-                    {overdrivenBars > 0
-                      ? 'Using Battery'
-                      : `${remainingSolarBars} Solar Left`}
-                  </span>
-                </div>
-
-                {/* Row 2: Thin 4-Module Switcher */}
-                <div className="grid grid-cols-4 gap-1.5">
-                  {MODULE_ORDER.map((key) => {
-                    const info = MODULE_INFO[key];
-                    const level = allocation[key];
-                    const active = selectedModule === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setSelectedModule(key);
-                          triggerPulse(key);
-                        }}
-                        className={`min-h-[38px] px-1.5 py-1 rounded-xl border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                          active
-                            ? 'bg-[#1A2947] border-amber-400 text-white'
-                            : 'bg-[#131D33] border-slate-700/70 text-slate-300 hover:border-slate-500'
-                        }`}
-                      >
-                        <span className="font-display font-bold text-xs">{info.shortName}</span>
-                        <span className="flex items-center gap-0.5" aria-hidden="true">
-                          {[1, 2, 3].map((pip) => (
-                            <span
-                              key={pip}
-                              className={`w-1.5 h-2 rounded-[2px] ${
-                                level >= pip ? info.dotClass : 'bg-slate-700'
-                              }`}
-                            />
-                          ))}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Row 3: Selected Building + Big - / + + Go Button */}
-                <div className="flex items-center justify-between gap-2 pt-0.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-display font-bold text-sm text-white truncate leading-tight">
-                      {MODULE_INFO[selectedModule].name}
-                    </p>
-                    <p className="text-[11px] text-cyan-200 truncate">
-                      {getKidEffectLine(
-                        selectedModule,
-                        allocation[selectedModule],
-                        site,
-                        forecast.radiationMsv
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => adjustModulePower(selectedModule, -1)}
-                      disabled={allocation[selectedModule] <= 0}
-                      aria-label={`Less power for ${MODULE_INFO[selectedModule].name}`}
-                      className="w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 border border-slate-600 flex items-center justify-center text-white cursor-pointer"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => adjustModulePower(selectedModule, 1)}
-                      disabled={
-                        allocation[selectedModule] >= 3 || usedPowerUnits >= maxAllowedUnits
-                      }
-                      aria-label={`More power for ${MODULE_INFO[selectedModule].name}`}
-                      className="w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 border border-slate-600 flex items-center justify-center text-white cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRunSolPower}
-                      className="h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
-                    >
-                      <span>Go!</span>
-                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  </div>
                 </div>
               </div>
             ) : phase === 'SOL_DILEMMA' && activeDilemma ? (
@@ -930,7 +941,7 @@ export default function App() {
                 </div>
               </div>
             ) : phase === 'SOL_OUTCOME' && chosenOption ? (
-              <div className="rounded-2xl bg-[#0F172A]/96 border border-slate-700/90 p-3 shadow-2xl space-y-2.5 max-h-[44dvh] overflow-y-auto">
+              <div className="rounded-2xl bg-[#0F172A]/96 border border-slate-700/90 p-3 shadow-2xl space-y-2.5 max-h-[48dvh] overflow-y-auto">
                 <div className="space-y-1">
                   <p className="font-display font-bold text-sm text-amber-300">
                     {chosenOption.label}
@@ -959,6 +970,71 @@ export default function App() {
                     <strong>NASA Fact:</strong> {chosenOption.scienceTakeaway}
                   </p>
                 </div>
+
+                {sol < TOTAL_SOLS && (
+                  <div className="pt-1.5 border-t border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-300 truncate">
+                        <strong className="text-amber-300">Sol {displaySol + 1}:</strong>{' '}
+                        {nextSolForecast.radiationMsv >= 18
+                          ? 'Solar Storm! Tap Shield'
+                          : nextSolForecast.dustStormActive
+                            ? 'Dust Storm · Low Solar'
+                            : nextSolForecast.title}
+                      </span>
+                      <span
+                        className={`font-mono font-bold tabular-nums shrink-0 ${
+                          overdrivenBars > 0
+                            ? 'text-rose-300'
+                            : remainingSolarBars > 0
+                              ? 'text-emerald-300'
+                              : 'text-amber-300'
+                        }`}
+                      >
+                        {overdrivenBars > 0
+                          ? 'Using Battery'
+                          : `${remainingSolarBars} Solar Left`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {MODULE_ORDER.map((key) => {
+                        const info = MODULE_INFO[key];
+                        const level = allocation[key];
+                        const active = selectedModule === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleTap3DModule(key)}
+                            title={getKidEffectLine(
+                              key,
+                              level,
+                              site,
+                              nextSolForecast.radiationMsv
+                            )}
+                            className={`min-h-[36px] px-1.5 py-1 rounded-xl border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                              active
+                                ? 'bg-[#1A2947] border-amber-400 text-white'
+                                : 'bg-[#131D33] border-slate-700/70 text-slate-300 hover:border-slate-500'
+                            }`}
+                          >
+                            <span className="font-display font-bold text-xs">{info.shortName}</span>
+                            <span className="flex items-center gap-0.5" aria-hidden="true">
+                              {[1, 2, 3].map((pip) => (
+                                <span
+                                  key={pip}
+                                  className={`w-1.5 h-2 rounded-[2px] ${
+                                    level >= pip ? info.dotClass : 'bg-slate-700'
+                                  }`}
+                                />
+                              ))}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <button
                   type="button"
