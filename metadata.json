@@ -1,0 +1,6 @@
+{
+  "name": "Outpost Horizon",
+  "description": "An interactive NASA Space Apps lunar and Martian outpost mission trainer where junior astronauts balance power, oxygen, food, radiation shielding, and light-time communications using real NASA open data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
