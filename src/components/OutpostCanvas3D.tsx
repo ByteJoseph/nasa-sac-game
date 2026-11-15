@@ -170,17 +170,17 @@ export function OutpostCanvas3D({
     scene.environment = envTex;
     pmremGenerator.dispose();
 
-    const initialFov = width / height < 0.56 ? 52 : 46;
+    const initialFov = width / height < 0.56 ? 54 : 48;
     const camera = new THREE.PerspectiveCamera(initialFov, width / height, 0.2, 120);
-    camera.position.set(0.2, 10.2, 16.5);
+    camera.position.set(0.2, 12.2, 20.4);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(-0.3, -0.1, 1.15);
+    controls.target.set(-0.4, -0.2, 1.1);
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.06;
     controls.enablePan = false;
-    controls.minDistance = 8.5;
-    controls.maxDistance = 23.0;
+    controls.minDistance = 10.0;
+    controls.maxDistance = 28.0;
     controls.minPolarAngle = 0.35;
     controls.maxPolarAngle = Math.PI * 0.42;
     controls.minAzimuthAngle = -Math.PI * 0.45;
@@ -197,15 +197,15 @@ export function OutpostCanvas3D({
     scene.add(hemiLight);
 
     const keyLight = new THREE.DirectionalLight(0xfff1d6, 2.25);
-    keyLight.position.set(9, 13, 8);
+    keyLight.position.set(11, 16, 10);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.set(1024, 1024);
-    keyLight.shadow.camera.left = -10;
-    keyLight.shadow.camera.right = 10;
-    keyLight.shadow.camera.top = 10;
-    keyLight.shadow.camera.bottom = -10;
+    keyLight.shadow.camera.left = -14;
+    keyLight.shadow.camera.right = 14;
+    keyLight.shadow.camera.top = 14;
+    keyLight.shadow.camera.bottom = -14;
     keyLight.shadow.camera.near = 1;
-    keyLight.shadow.camera.far = 36;
+    keyLight.shadow.camera.far = 42;
     keyLight.shadow.bias = -0.0005;
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
@@ -316,7 +316,7 @@ export function OutpostCanvas3D({
       const w = Math.max(1, container.clientWidth);
       const h = Math.max(1, container.clientHeight);
       camera.aspect = w / h;
-      camera.fov = w / h < 0.56 ? 52 : 46;
+      camera.fov = w / h < 0.56 ? 54 : 48;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     });
@@ -477,10 +477,10 @@ export function OutpostCanvas3D({
         if (alloc.lab > 0 || titleMode) {
           const speed = (titleMode ? 0.34 : 0.36 + alloc.lab * 0.16) * simMult;
           roverAngle += dt * speed;
-          const rx = 2.4 + Math.cos(roverAngle) * 1.15;
-          const rz = 3.9 + Math.sin(roverAngle) * 0.75;
-          const nextX = 2.4 + Math.cos(roverAngle + 0.08) * 1.15;
-          const nextZ = 3.9 + Math.sin(roverAngle + 0.08) * 0.75;
+          const rx = 3.6 + Math.cos(roverAngle) * 1.35;
+          const rz = 4.9 + Math.sin(roverAngle) * 0.85;
+          const nextX = 3.6 + Math.cos(roverAngle + 0.08) * 1.35;
+          const nextZ = 4.9 + Math.sin(roverAngle + 0.08) * 0.85;
           world.roverGroup.position.set(rx, 0, rz);
           world.roverGroup.lookAt(nextX, 0, nextZ);
           world.roverWheels.forEach((w) => {
@@ -488,36 +488,78 @@ export function OutpostCanvas3D({
           });
         }
 
-        // 7. Hero Astronaut Commander Maya walks to the active module!
+        // 7. Hero Astronaut Commander Maya articulated walk, wave & inspection animation
         const hero = world.heroAstronaut;
+        const heroRig = hero.userData.rig as
+          | {
+              legLPivot: THREE.Group;
+              legRPivot: THREE.Group;
+              armLPivot: THREE.Group;
+              armRPivot: THREE.Group;
+              headGroup: THREE.Group;
+            }
+          | undefined;
+
         if (titleMode) {
-          _astroGoal.set(-0.65, 0, 2.75);
+          _astroGoal.set(-0.55, 0, 3.45);
         } else {
           const mPos = world.modulePositions[selMod];
-          _astroGoal.set(mPos.x * 0.58, 0, Math.min(3.3, mPos.z * 0.58 + 1.45));
+          _astroGoal.set(mPos.x * 0.62, 0, Math.min(4.2, mPos.z * 0.62 + 1.55));
         }
         const distSq =
           (hero.position.x - _astroGoal.x) * (hero.position.x - _astroGoal.x) +
           (hero.position.z - _astroGoal.z) * (hero.position.z - _astroGoal.z);
-        if (distSq > 0.01) {
+
+        if (distSq > 0.015) {
           const dx = _astroGoal.x - hero.position.x;
           const dz = _astroGoal.z - hero.position.z;
-          hero.position.x = THREE.MathUtils.damp(hero.position.x, _astroGoal.x, 3.6, dt);
-          hero.position.z = THREE.MathUtils.damp(hero.position.z, _astroGoal.z, 3.6, dt);
+          hero.position.x = THREE.MathUtils.damp(hero.position.x, _astroGoal.x, 3.8, dt);
+          hero.position.z = THREE.MathUtils.damp(hero.position.z, _astroGoal.z, 3.8, dt);
           hero.rotation.y = Math.atan2(dx, dz);
-          hero.position.y = Math.abs(Math.sin(elapsed * 9)) * 0.08;
-          hero.rotation.z = Math.sin(elapsed * 9) * 0.06;
+          hero.position.y = Math.abs(Math.sin(elapsed * 9)) * 0.07;
+          if (heroRig) {
+            const swing = Math.sin(elapsed * 9) * 0.55;
+            heroRig.legLPivot.rotation.x = swing;
+            heroRig.legRPivot.rotation.x = -swing;
+            heroRig.armLPivot.rotation.x = -swing * 0.85;
+            heroRig.armRPivot.rotation.x = swing * 0.85;
+            heroRig.armRPivot.rotation.z = THREE.MathUtils.damp(heroRig.armRPivot.rotation.z, 0, 6, dt);
+            heroRig.headGroup.rotation.y = 0;
+          }
         } else {
-          hero.position.y = Math.abs(Math.sin(elapsed * 2.2)) * 0.025;
-          hero.rotation.z = 0;
-          hero.rotation.y = THREE.MathUtils.damp(hero.rotation.y, 0.18, 4, dt);
+          hero.position.y = Math.abs(Math.sin(elapsed * 2.2)) * 0.018;
+          hero.rotation.y = THREE.MathUtils.damp(hero.rotation.y, 0.16, 4, dt);
+          if (heroRig) {
+            heroRig.legLPivot.rotation.x = THREE.MathUtils.damp(heroRig.legLPivot.rotation.x, 0, 8, dt);
+            heroRig.legRPivot.rotation.x = THREE.MathUtils.damp(heroRig.legRPivot.rotation.x, 0, 8, dt);
+            heroRig.armLPivot.rotation.x = THREE.MathUtils.damp(heroRig.armLPivot.rotation.x, 0, 8, dt);
+            if (titleMode) {
+              // Friendly wave on title screen
+              heroRig.armRPivot.rotation.z = THREE.MathUtils.damp(
+                heroRig.armRPivot.rotation.z,
+                2.35 + Math.sin(elapsed * 5.2) * 0.25,
+                6,
+                dt
+              );
+              heroRig.armRPivot.rotation.x = THREE.MathUtils.damp(heroRig.armRPivot.rotation.x, 0, 6, dt);
+            } else {
+              // Checking wrist display / inspecting outpost module
+              heroRig.armRPivot.rotation.z = THREE.MathUtils.damp(heroRig.armRPivot.rotation.z, 0.12, 6, dt);
+              heroRig.armRPivot.rotation.x = THREE.MathUtils.damp(
+                heroRig.armRPivot.rotation.x,
+                fc.radiationMsv >= 18 ? -1.15 : -0.65,
+                6,
+                dt
+              );
+            }
+            heroRig.headGroup.rotation.y = Math.sin(elapsed * 1.1) * 0.22;
+          }
         }
 
         // Companion crewmate gentle idle motion
         const buddy = world.astronauts[1];
         if (buddy) {
-          buddy.position.y = Math.abs(Math.sin(elapsed * 2.8 + 1.2)) * 0.035;
-          buddy.rotation.z = Math.sin(elapsed * 2.0) * 0.03;
+          buddy.position.y = Math.abs(Math.sin(elapsed * 2.6 + 1.2)) * 0.025;
         }
 
         // 8. Atmospheric Weather Particles drift (zero allocations)
@@ -575,7 +617,7 @@ export function OutpostCanvas3D({
         // 11. Gentle Camera Target Nudge toward Selected Module during Allocate Power
         if (focusActiveRef.current && canEdit && !titleMode) {
           const mPos = world.modulePositions[selMod];
-          _focusTarget.set(-0.3 + mPos.x * 0.24, -0.1, 1.15 + mPos.z * 0.22);
+          _focusTarget.set(-0.4 + mPos.x * 0.22, -0.2, 1.1 + mPos.z * 0.2);
           controls.target.lerp(_focusTarget, 1 - Math.exp(-4.5 * dt));
           if (controls.target.distanceToSquared(_focusTarget) < 0.002) {
             focusActiveRef.current = false;

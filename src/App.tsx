@@ -52,8 +52,6 @@ import type {
 } from './types/game';
 import { soundEngine } from './utils/sound';
 
-const MAYA_AVATAR = '/src/assets/images/astronaut_commander_avatar_1794738052744.jpg';
-
 const DEFAULT_WEATHER: SpaceWeatherSnapshot = {
   sourceMode: 'curated-archive',
   sourceLabel: 'Curated NASA DONKI & NOAA SWPC Archive (Oct 2024 Solar Maximum)',
@@ -174,7 +172,6 @@ export default function App() {
   const [weather, setWeather] = useState<SpaceWeatherSnapshot>(DEFAULT_WEATHER);
   const [guideOpen, setGuideOpen] = useState(false);
   const [muted, setMuted] = useState(false);
-  const [mayaAvatarFailed, setMayaAvatarFailed] = useState(false);
 
   // Active Story State
   const [sol, setSol] = useState(1);
@@ -755,20 +752,9 @@ export default function App() {
               <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 p-3 shadow-2xl space-y-2.5">
                 {/* Row 1: Maya 1-Liner + Simple Solar Count */}
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {!mayaAvatarFailed ? (
-                      <img
-                        src={MAYA_AVATAR}
-                        alt="Maya"
-                        referrerPolicy="no-referrer"
-                        onError={() => setMayaAvatarFailed(true)}
-                        className="w-8 h-8 rounded-lg object-cover shrink-0 border border-amber-400/60"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-lg bg-slate-800 shrink-0" />
-                    )}
-                    <p className="text-xs font-medium text-slate-100 truncate">{kidPrompt}</p>
-                  </div>
+                  <p className="text-xs font-medium text-slate-100 truncate">
+                    <span className="text-amber-300 font-bold">Maya:</span> {kidPrompt}
+                  </p>
                   <span
                     className={`text-[11px] font-mono font-bold tabular-nums shrink-0 ${
                       overdrivenBars > 0
@@ -897,42 +883,29 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="flex items-start gap-2.5">
-                  {!mayaAvatarFailed ? (
-                    <img
-                      src={MAYA_AVATAR}
-                      alt="Commander Maya"
-                      referrerPolicy="no-referrer"
-                      onError={() => setMayaAvatarFailed(true)}
-                      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-amber-400/60"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-lg bg-slate-800 shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className="font-display font-bold text-sm text-white leading-tight">
-                        {activeDilemma.title}
-                      </h2>
-                      {activeDilemma.requiresCommsDelay && (
-                        <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300 shrink-0">
-                          <Radio className="w-3.5 h-3.5" aria-hidden="true" />
-                          {site === 'mars' || site === 'europa'
-                            ? `${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`
-                            : `${commsSecondsLeft}s`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-200 leading-snug mt-1">
-                      {activeDilemma.briefing}{' '}
-                      {activeDilemma.requiresCommsDelay && (
-                        <GlossaryTerm termKey="Light-Time Delay" label="Why delay?" />
-                      )}
-                      {activeDilemma.category === 'Solar Weather' && (
-                        <GlossaryTerm termKey="CME" label="CME?" />
-                      )}
-                    </p>
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-display font-bold text-sm text-white leading-tight">
+                      {activeDilemma.title}
+                    </h2>
+                    {activeDilemma.requiresCommsDelay && (
+                      <span className="flex items-center gap-1 text-[11px] font-mono tabular-nums text-amber-300 shrink-0">
+                        <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+                        {site === 'mars' || site === 'europa'
+                          ? `${Math.floor(commsSecondsLeft / 60)}m ${String(commsSecondsLeft % 60).padStart(2, '0')}s`
+                          : `${commsSecondsLeft}s`}
+                      </span>
+                    )}
                   </div>
+                  <p className="text-xs text-slate-200 leading-snug mt-1">
+                    {activeDilemma.briefing}{' '}
+                    {activeDilemma.requiresCommsDelay && (
+                      <GlossaryTerm termKey="Light-Time Delay" label="Why delay?" />
+                    )}
+                    {activeDilemma.category === 'Solar Weather' && (
+                      <GlossaryTerm termKey="CME" label="CME?" />
+                    )}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -967,46 +940,33 @@ export default function App() {
               </div>
             ) : phase === 'SOL_OUTCOME' && chosenOption ? (
               <div className="rounded-2xl bg-[#0F172A]/96 border border-slate-700/90 p-3 shadow-2xl space-y-2.5 max-h-[44dvh] overflow-y-auto">
-                <div className="flex items-start gap-2.5">
-                  {!mayaAvatarFailed ? (
-                    <img
-                      src={MAYA_AVATAR}
-                      alt="Commander Maya"
-                      referrerPolicy="no-referrer"
-                      onError={() => setMayaAvatarFailed(true)}
-                      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-emerald-400/60"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-lg bg-slate-800 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-display font-bold text-sm text-amber-300">
+                    {chosenOption.label}
+                  </p>
+                  {solNetDeltas && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-semibold tabular-nums">
+                      {getDeltaChips(solNetDeltas).map((c) => (
+                        <span
+                          key={c.label}
+                          className={c.positive ? 'text-emerald-300' : 'text-rose-300'}
+                        >
+                          {c.label}
+                        </span>
+                      ))}
+                    </div>
                   )}
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <p className="font-display font-bold text-sm text-amber-300">
-                      {chosenOption.label}
+                  <p className="text-xs text-slate-200 leading-snug">
+                    {chosenOption.outcomeStory}
+                  </p>
+                  {outcomeNotes.length > 0 && (
+                    <p className="text-xs text-rose-300 font-medium">
+                      {outcomeNotes.join(' ')}
                     </p>
-                    {solNetDeltas && (
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-semibold tabular-nums">
-                        {getDeltaChips(solNetDeltas).map((c) => (
-                          <span
-                            key={c.label}
-                            className={c.positive ? 'text-emerald-300' : 'text-rose-300'}
-                          >
-                            {c.label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-xs text-slate-200 leading-snug">
-                      {chosenOption.outcomeStory}
-                    </p>
-                    {outcomeNotes.length > 0 && (
-                      <p className="text-xs text-rose-300 font-medium">
-                        {outcomeNotes.join(' ')}
-                      </p>
-                    )}
-                    <p className="text-[11px] text-cyan-300">
-                      <strong>NASA Fact:</strong> {chosenOption.scienceTakeaway}
-                    </p>
-                  </div>
+                  )}
+                  <p className="text-[11px] text-cyan-300">
+                    <strong>NASA Fact:</strong> {chosenOption.scienceTakeaway}
+                  </p>
                 </div>
 
                 <button

@@ -11,16 +11,16 @@ export function groundHeightAt(x: number, z: number, site: OutpostSite): number 
   const dist = Math.sqrt(x * x + z * z);
 
   // Canyon rim drop-off on the far left (behind/below the helipads)
-  if (x < -6.2 && z > -5.5 && z < 6.5) {
-    const cliffT = Math.min(1, (-6.2 - x) / 6.0);
+  if (x < -9.2 && z > -7.5 && z < 8.5) {
+    const cliffT = Math.min(1, (-9.2 - x) / 6.5);
     return -cliffT * cliffT * 3.8;
   }
 
-  // Flat central outpost plateau so all modules, pads, and paths sit flush
-  if (dist <= 6.9) return 0;
+  // Flat central outpost plateau so all spaced-out modules, pads, and paths sit flush
+  if (dist <= 10.2) return 0;
 
   // Distant layered canyon mesas & crater rims
-  const rimT = Math.min(1, (dist - 6.9) / 18);
+  const rimT = Math.min(1, (dist - 10.2) / 18);
   const smooth = rimT * rimT * (3 - 2 * rimT);
   const mesaSteps =
     Math.round(
@@ -130,54 +130,102 @@ function buildAstronaut(
   packMat: THREE.Material,
   visorMat: THREE.Material,
   bootMat: THREE.Material,
+  accentMat: THREE.Material | null,
   isSoftwareGl: boolean,
   disposables: Array<{ dispose: () => void }>
 ): THREE.Group {
   const astro = new THREE.Group();
 
-  const legGeo = new THREE.CapsuleGeometry(0.065, 0.18, 4, 8);
+  // Articulated Left & Right Leg Pivots (pivot at hip y = 0.28)
+  const legLPivot = new THREE.Group();
+  legLPivot.position.set(-0.08, 0.28, 0);
+  const legRPivot = new THREE.Group();
+  legRPivot.position.set(0.08, 0.28, 0);
+
+  const legGeo = new THREE.CapsuleGeometry(0.065, 0.16, 4, 8);
+  const bootGeo = new THREE.BoxGeometry(0.11, 0.075, 0.16);
+
   const legL = new THREE.Mesh(legGeo, suitMat);
-  legL.position.set(-0.08, 0.16, 0);
+  legL.position.set(0, -0.12, 0);
   legL.castShadow = !isSoftwareGl;
-  const legR = new THREE.Mesh(legGeo, suitMat);
-  legR.position.set(0.08, 0.16, 0.04);
-  legR.castShadow = !isSoftwareGl;
-
-  const bootGeo = new THREE.BoxGeometry(0.1, 0.07, 0.15);
   const bootL = new THREE.Mesh(bootGeo, bootMat);
-  bootL.position.set(-0.08, 0.035, 0.02);
-  const bootR = new THREE.Mesh(bootGeo, bootMat);
-  bootR.position.set(0.08, 0.035, 0.06);
+  bootL.position.set(0, -0.245, 0.025);
+  legLPivot.add(legL, bootL);
 
-  const torsoGeo = new THREE.CapsuleGeometry(0.14, 0.2, 6, 10);
+  const legR = new THREE.Mesh(legGeo, suitMat);
+  legR.position.set(0, -0.12, 0);
+  legR.castShadow = !isSoftwareGl;
+  const bootR = new THREE.Mesh(bootGeo, bootMat);
+  bootR.position.set(0, -0.245, 0.025);
+  legRPivot.add(legR, bootR);
+
+  // Torso & Life-Support Backpack
+  const torsoGeo = new THREE.CapsuleGeometry(0.145, 0.21, 6, 10);
   const torso = new THREE.Mesh(torsoGeo, suitMat);
-  torso.position.set(0, 0.42, 0);
+  torso.position.set(0, 0.44, 0);
   torso.castShadow = !isSoftwareGl;
 
-  const packGeo = new THREE.BoxGeometry(0.22, 0.28, 0.14);
+  const packGeo = new THREE.BoxGeometry(0.24, 0.3, 0.15);
   const pack = new THREE.Mesh(packGeo, packMat);
-  pack.position.set(0, 0.44, -0.14);
+  pack.position.set(0, 0.46, -0.15);
   pack.castShadow = !isSoftwareGl;
 
-  const armGeo = new THREE.CapsuleGeometry(0.05, 0.18, 4, 8);
-  const armL = new THREE.Mesh(armGeo, suitMat);
-  armL.position.set(-0.2, 0.42, 0.02);
-  armL.rotation.z = 0.25;
-  const armR = new THREE.Mesh(armGeo, suitMat);
-  armR.position.set(0.2, 0.42, -0.02);
-  armR.rotation.z = -0.25;
+  const chestBoxGeo = new THREE.BoxGeometry(0.14, 0.11, 0.06);
+  const chestBox = new THREE.Mesh(chestBoxGeo, accentMat ?? bootMat);
+  chestBox.position.set(0, 0.47, 0.13);
 
-  const helmetGeo = new THREE.SphereGeometry(0.13, 14, 14);
+  // Articulated Arm Pivots (pivot at shoulder y = 0.52)
+  const armLPivot = new THREE.Group();
+  armLPivot.position.set(-0.2, 0.52, 0);
+  const armRPivot = new THREE.Group();
+  armRPivot.position.set(0.2, 0.52, 0);
+
+  const armGeo = new THREE.CapsuleGeometry(0.052, 0.18, 4, 8);
+  const armL = new THREE.Mesh(armGeo, suitMat);
+  armL.position.set(-0.02, -0.12, 0);
+  armL.rotation.z = -0.15;
+  armL.castShadow = !isSoftwareGl;
+  armLPivot.add(armL);
+
+  const armR = new THREE.Mesh(armGeo, suitMat);
+  armR.position.set(0.02, -0.12, 0);
+  armR.rotation.z = 0.15;
+  armR.castShadow = !isSoftwareGl;
+  armRPivot.add(armR);
+
+  // Head / Helmet Group
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 0.71, 0);
+
+  const helmetGeo = new THREE.SphereGeometry(0.14, 16, 16);
   const helmet = new THREE.Mesh(helmetGeo, suitMat);
-  helmet.position.set(0, 0.68, 0);
   helmet.castShadow = !isSoftwareGl;
 
-  const visorGeo = new THREE.SphereGeometry(0.105, 12, 12, -Math.PI * 0.4, Math.PI * 0.8, 0.35, 1.4);
+  const visorGeo = new THREE.SphereGeometry(0.115, 14, 14, -Math.PI * 0.42, Math.PI * 0.84, 0.35, 1.45);
   const visor = new THREE.Mesh(visorGeo, visorMat);
-  visor.position.set(0, 0.68, 0.045);
+  visor.position.set(0, 0, 0.048);
+  headGroup.add(helmet, visor);
 
-  astro.add(legL, legR, bootL, bootR, torso, pack, armL, armR, helmet, visor);
-  disposables.push(legGeo, bootGeo, torsoGeo, packGeo, armGeo, helmetGeo, visorGeo);
+  if (accentMat) {
+    const stripeGeo = new THREE.TorusGeometry(0.142, 0.016, 6, 16, Math.PI);
+    stripeGeo.rotateY(Math.PI / 2);
+    const crest = new THREE.Mesh(stripeGeo, accentMat);
+    crest.position.set(0, 0.02, 0);
+    headGroup.add(crest);
+
+    const bandGeo = new THREE.CylinderGeometry(0.058, 0.058, 0.045, 10);
+    const bandL = new THREE.Mesh(bandGeo, accentMat);
+    bandL.position.set(-0.015, -0.05, 0);
+    const bandR = new THREE.Mesh(bandGeo, accentMat);
+    bandR.position.set(0.015, -0.05, 0);
+    armLPivot.add(bandL);
+    armRPivot.add(bandR);
+    disposables.push(stripeGeo, bandGeo);
+  }
+
+  astro.add(legLPivot, legRPivot, torso, pack, chestBox, armLPivot, armRPivot, headGroup);
+  astro.userData.rig = { legLPivot, legRPivot, armLPivot, armRPivot, headGroup };
+  disposables.push(legGeo, bootGeo, torsoGeo, packGeo, chestBoxGeo, armGeo, helmetGeo, visorGeo);
   return astro;
 }
 
@@ -228,7 +276,7 @@ export function buildOutpostWorld(
   const color = new THREE.Color();
   for (let i = 0; i < rockCount; i++) {
     const angle = (i / rockCount) * Math.PI * 2 + (i % 3) * 0.19;
-    const radius = 7.4 + ((i * 7) % 14);
+    const radius = 10.8 + ((i * 7) % 14);
     const rx = Math.cos(angle) * radius;
     const rz = Math.sin(angle) * radius;
     const ry = groundHeightAt(rx, rz, site);
@@ -332,45 +380,60 @@ export function buildOutpostWorld(
 
   // Foreground Gravel Footpath leading out from the central outpost
   const pathPoints = [
-    new THREE.Vector3(-0.35, 0.03, 0.6),
-    new THREE.Vector3(-0.25, 0.03, 2.4),
-    new THREE.Vector3(-0.6, 0.03, 4.3),
-    new THREE.Vector3(-0.3, 0.03, 6.2),
+    new THREE.Vector3(-0.35, 0.03, 0.8),
+    new THREE.Vector3(-0.25, 0.03, 3.0),
+    new THREE.Vector3(-0.65, 0.03, 5.2),
+    new THREE.Vector3(-0.3, 0.03, 7.6),
   ];
   const pathCurve = new THREE.CatmullRomCurve3(pathPoints);
-  const pathTubeGeo = new THREE.TubeGeometry(pathCurve, 20, 0.42, 6, false);
+  const pathTubeGeo = new THREE.TubeGeometry(pathCurve, 20, 0.45, 6, false);
   pathTubeGeo.scale(1, 0.08, 1);
   const pathMesh = new THREE.Mesh(pathTubeGeo, gravelPathMat);
   pathMesh.receiveShadow = true;
   root.add(pathMesh);
   disposables.push(pathTubeGeo);
 
-  // Foreground Hero Astronaut Commander (Maya) + Crewmate on the gravel path
+  // Foreground Hero Astronaut Commander (Maya) + Crewmate on the plateau
+  const commanderAccentMat = new THREE.MeshStandardMaterial({
+    color: 0xf97316,
+    emissive: 0xc2410c,
+    emissiveIntensity: 0.35,
+    roughness: 0.35,
+    metalness: 0.2,
+  });
+  disposables.push(commanderAccentMat);
+
   const astro1 = buildAstronaut(
     hullWhiteMat,
     hullCreamMat,
     brushedGoldMat,
     darkFrameMat,
+    commanderAccentMat,
     isSoftwareGl,
     disposables
   );
-  astro1.scale.setScalar(1.22);
-  astro1.position.set(-0.65, 0, 2.75);
-  astro1.rotation.y = 0.25;
+  astro1.scale.setScalar(1.58);
+  astro1.position.set(-0.55, 0, 3.45);
+  astro1.rotation.y = 0.2;
+  addContactShadow(astro1, 0.45, shadowTex, disposables);
+
   const astro2 = buildAstronaut(
     hullWhiteMat,
     hullCreamMat,
     brushedGoldMat,
     darkFrameMat,
+    null,
     isSoftwareGl,
     disposables
   );
-  astro2.position.set(0.25, 0, 4.15);
-  astro2.rotation.y = -0.22;
+  astro2.scale.setScalar(1.2);
+  astro2.position.set(0.6, 0, 5.15);
+  astro2.rotation.y = -0.25;
+  addContactShadow(astro2, 0.38, shadowTex, disposables);
   root.add(astro1, astro2);
 
   // 4. Central Octagonal Command Hub (connects all modules)
-  const hubPos = new THREE.Vector3(0, 0, -0.45);
+  const hubPos = new THREE.Vector3(0, 0, -0.6);
   const hubGroup = new THREE.Group();
   hubGroup.position.copy(hubPos);
   addContactShadow(hubGroup, 2.1, shadowTex, disposables);
@@ -419,17 +482,17 @@ export function buildOutpostWorld(
   });
   const padGeo = new THREE.CylinderGeometry(1.55, 1.72, 0.16, 8);
   const pad1 = new THREE.Mesh(padGeo, [darkFrameMat, padTopMat, darkFrameMat]);
-  pad1.position.set(-4.35, 0.08, 0.55);
+  pad1.position.set(-6.8, 0.08, 1.0);
   pad1.receiveShadow = true;
   const pad2 = new THREE.Mesh(padGeo, [darkFrameMat, padTopMat, darkFrameMat]);
-  pad2.position.set(-4.55, 0.08, -2.05);
+  pad2.position.set(-7.1, 0.08, -2.9);
   pad2.receiveShadow = true;
   root.add(pad1, pad2);
   disposables.push(padTex, padTopMat, padGeo);
 
   // 4-Legged Supply Lander perched on Pad 1
   const landerGroup = new THREE.Group();
-  landerGroup.position.set(-4.35, 0.16, 0.55);
+  landerGroup.position.set(-6.8, 0.16, 1.0);
   const landerDeckGeo = new THREE.CylinderGeometry(0.45, 0.52, 0.28, 8);
   const landerDeck = new THREE.Mesh(landerDeckGeo, brushedGoldMat);
   landerDeck.position.y = 0.46;
@@ -451,16 +514,16 @@ export function buildOutpostWorld(
   root.add(landerGroup);
   disposables.push(landerDeckGeo, landerCabGeo, strutGeo);
 
-  // Clickable Module Coordinates (interconnected around Central Hub!)
+  // Clickable Module Coordinates (widely spaced around Central Hub with longer connecting tunnels!)
   const modulePositions: Record<ModuleKey, THREE.Vector3> = {
-    scrubber: new THREE.Vector3(-2.1, 0, 1.05),
-    shield: new THREE.Vector3(0.85, 0, 1.35),
-    greenhouse: new THREE.Vector3(2.95, 0, 0.45),
-    lab: new THREE.Vector3(1.55, 0, -2.15),
+    scrubber: new THREE.Vector3(-3.35, 0, 1.65),
+    shield: new THREE.Vector3(1.15, 0, 2.35),
+    greenhouse: new THREE.Vector3(4.65, 0, 0.65),
+    lab: new THREE.Vector3(2.65, 0, -3.25),
   };
 
   // Corrugated Tunnels linking Hub to every module + Rear Biodome
-  const rearDomePos = new THREE.Vector3(-1.85, 0, -2.1);
+  const rearDomePos = new THREE.Vector3(-3.0, 0, -3.1);
   addCorrugatedTunnel(root, hubPos, modulePositions.scrubber, hullCreamMat, darkFrameMat, isSoftwareGl, disposables);
   addCorrugatedTunnel(root, hubPos, modulePositions.shield, hullCreamMat, darkFrameMat, isSoftwareGl, disposables);
   addCorrugatedTunnel(root, hubPos, modulePositions.greenhouse, hullCreamMat, darkFrameMat, isSoftwareGl, disposables);
@@ -519,8 +582,8 @@ export function buildOutpostWorld(
     solarWings.add(bank);
     disposables.push(postGeo, wingGeo);
   };
-  buildSolarBank(-0.65, -3.3, 0.1);
-  buildSolarBank(3.35, 2.55, -0.35);
+  buildSolarBank(-0.45, -4.75, 0.1);
+  buildSolarBank(5.2, 3.6, -0.35);
   root.add(solarWings);
   disposables.push(solarTex, solarPanelMat);
 
@@ -755,7 +818,7 @@ export function buildOutpostWorld(
   shieldGroup.add(beacon);
 
   // Protective Translucent Energy Shield Dome over the central interconnected base
-  const shieldDomeGeo = new THREE.SphereGeometry(5.8, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const shieldDomeGeo = new THREE.SphereGeometry(7.8, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
   const shieldDomeMat = new THREE.MeshPhysicalMaterial({
     color: 0x38bdf8,
     emissive: 0x0284c7,
@@ -768,7 +831,7 @@ export function buildOutpostWorld(
     side: THREE.DoubleSide,
   });
   const shieldDomeMesh = new THREE.Mesh(shieldDomeGeo, shieldDomeMat);
-  shieldDomeMesh.position.set(0.2, 0, -0.1);
+  shieldDomeMesh.position.set(0.4, 0, -0.2);
   shieldDomeMesh.renderOrder = 6;
   root.add(shieldDomeMesh);
   root.add(shieldGroup);
@@ -842,7 +905,7 @@ export function buildOutpostWorld(
 
   // 10. 6-Wheel Pressurized Rover with Articulated Crane Arm (Foreground Right)
   const roverGroup = new THREE.Group();
-  roverGroup.position.set(2.0, 0, 3.9);
+  roverGroup.position.set(3.6, 0, 4.9);
   addContactShadow(roverGroup, 0.78, shadowTex, disposables);
 
   const roverBodyGeo = new THREE.BoxGeometry(0.76, 0.34, 1.05);

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { BookOpen, Play, Volume2, VolumeX } from 'lucide-react';
 import { SITE_PROFILES } from '../data/nasaScienceData';
 import type { DifficultyMode, OutpostSite, SpaceWeatherSnapshot } from '../types/game';
@@ -15,12 +14,10 @@ interface TitleScreenProps {
   onToggleMute: () => void;
 }
 
-const AVATAR_SRC = '/src/assets/images/astronaut_commander_avatar_1794738052744.jpg';
-
 const SITE_STORY_HOOK: Record<OutpostSite, string> = {
-  moon: 'Sol 214, Shackleton Ridge: A sudden storm threatens Maya’s lunar solar wings.',
-  mars: 'Sol 214, Jezero Crater: Dust storms & a 14m Earth delay test Maya’s grit.',
-  europa: 'Sol 214, Conamara Ice: 4% sunlight & Jupiter radiation belts await Maya.',
+  moon: 'Sol 214, Shackleton Ridge · Guide Astronaut Maya through a sudden lunar storm.',
+  mars: 'Sol 214, Jezero Crater · Help Astronaut Maya survive dust storms & a 14m radio delay.',
+  europa: 'Sol 214, Conamara Ice · Help Astronaut Maya survive 4% sunlight & Jupiter flares.',
 };
 
 export function TitleScreen({
@@ -34,7 +31,6 @@ export function TitleScreen({
   onOpenGuide,
   onToggleMute,
 }: TitleScreenProps) {
-  const [avatarFailed, setAvatarFailed] = useState(false);
   const siteTitle = site === 'moon' ? 'Moon' : site === 'mars' ? 'Mars' : 'Europa';
 
   return (
@@ -65,7 +61,7 @@ export function TitleScreen({
               Outpost Horizon
             </h1>
             <p className="text-[11px] text-amber-300 font-semibold mt-1 truncate">
-              Commander Maya ·{' '}
+              3D Astronaut Story ·{' '}
               {weather.sourceMode === 'live'
                 ? `Live Solar ${weather.latestFlareClass}`
                 : `NASA ${weather.latestFlareClass}`}
@@ -94,23 +90,11 @@ export function TitleScreen({
         </div>
       </div>
 
-      {/* Minimal Bottom Story Launch Sheet leaving 60%+ 3D scene open */}
+      {/* Minimal Bottom Story Launch Sheet (no 2D face avatar — 3D astronaut waves in scene!) */}
       <div className="bg-gradient-to-t from-[#070B16] via-[#070B16]/94 to-transparent px-4 pt-8 pb-4 space-y-2.5 pointer-events-auto">
-        {/* Astronaut Commander Story Hook */}
-        <div className="flex items-center gap-2.5 bg-[#0F172A]/95 border border-slate-700/80 rounded-xl px-3 py-2">
-          {!avatarFailed ? (
-            <img
-              src={AVATAR_SRC}
-              alt="Commander Maya"
-              referrerPolicy="no-referrer"
-              onError={() => setAvatarFailed(true)}
-              className="w-10 h-10 rounded-lg object-cover shrink-0 border border-amber-400/60"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-lg bg-slate-800 border border-amber-400/60 shrink-0" />
-          )}
-          <p className="text-xs text-slate-200 leading-snug">{SITE_STORY_HOOK[site]}</p>
-        </div>
+        <p className="text-xs text-slate-200 text-center leading-snug px-1">
+          {SITE_STORY_HOOK[site]}
+        </p>
 
         {/* World Selector Tabs */}
         <div className="grid grid-cols-3 gap-2">
