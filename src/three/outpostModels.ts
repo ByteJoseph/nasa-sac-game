@@ -57,6 +57,11 @@ export interface Outpost3DRefs {
   roverWheels: THREE.Mesh[];
   hoverRingMesh: THREE.Mesh;
   hoverRingMat: THREE.MeshBasicMaterial;
+  pulseRingMesh: THREE.Mesh;
+  pulseRingMat: THREE.MeshBasicMaterial;
+  weatherParticles: THREE.Points;
+  weatherParticleMat: THREE.PointsMaterial;
+  astronauts: THREE.Group[];
   clickableTargets: THREE.Mesh[];
   modulePositions: Record<ModuleKey, THREE.Vector3>;
   disposables: Array<{ dispose: () => void }>;
@@ -875,7 +880,7 @@ export function buildOutpostWorld(
   root.add(roverGroup);
   disposables.push(roverBodyGeo, roverCabGeo, craneBaseGeo, craneArmGeo, wheelGeo);
 
-  // 11. Ground Selection / Hover Ring
+  // 11. Ground Selection Ring + Expanding Tap Pulse Ring
   const hoverRingGeo = new THREE.RingGeometry(1.42, 1.68, 32);
   hoverRingGeo.rotateX(-Math.PI / 2);
   const hoverRingMat = new THREE.MeshBasicMaterial({
@@ -888,7 +893,49 @@ export function buildOutpostWorld(
   const hoverRingMesh = new THREE.Mesh(hoverRingGeo, hoverRingMat);
   hoverRingMesh.position.y = 0.05;
   root.add(hoverRingMesh);
-  disposables.push(hoverRingGeo, hoverRingMat);
+
+  const pulseRingGeo = new THREE.RingGeometry(1.25, 1.48, 32);
+  pulseRingGeo.rotateX(-Math.PI / 2);
+  const pulseRingMat = new THREE.MeshBasicMaterial({
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const pulseRingMesh = new THREE.Mesh(pulseRingGeo, pulseRingMat);
+  pulseRingMesh.position.y = 0.07;
+  pulseRingMesh.visible = false;
+  root.add(pulseRingMesh);
+
+  // 12. Atmospheric Weather / Dust / Radiation Particles
+  const particleCount = 120;
+  const particlePos = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    particlePos[i * 3] = (((i * 73) % 100) / 100 - 0.5) * 16;
+    particlePos[i * 3 + 1] = 0.4 + ((i * 37) % 100) * 0.045;
+    particlePos[i * 3 + 2] = (((i * 53) % 100) / 100 - 0.5) * 14;
+  }
+  const weatherParticleGeo = new THREE.BufferGeometry();
+  weatherParticleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+  const weatherParticleMat = new THREE.PointsMaterial({
+    color: site === 'mars' ? 0xfdba74 : site === 'europa' ? 0xbae6fd : 0xfef08a,
+    size: site === 'mars' ? 0.14 : 0.11,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+  });
+  const weatherParticles = new THREE.Points(weatherParticleGeo, weatherParticleMat);
+  root.add(weatherParticles);
+
+  disposables.push(
+    hoverRingGeo,
+    hoverRingMat,
+    pulseRingGeo,
+    pulseRingMat,
+    weatherParticleGeo,
+    weatherParticleMat
+  );
 
   return {
     root,
@@ -914,6 +961,11 @@ export function buildOutpostWorld(
     roverWheels,
     hoverRingMesh,
     hoverRingMat,
+    pulseRingMesh,
+    pulseRingMat,
+    weatherParticles,
+    weatherParticleMat,
+    astronauts: [astro1, astro2],
     clickableTargets,
     modulePositions,
     disposables,

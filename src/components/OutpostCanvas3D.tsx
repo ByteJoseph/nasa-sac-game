@@ -6,21 +6,30 @@ import { buildOutpostWorld, type Outpost3DRefs } from '../three/outpostModels';
 import { createContactShadowTexture } from '../three/proceduralTextures';
 import type { ModuleAllocation, ModuleKey, OutpostSite, SolForecast } from '../types/game';
 
+export interface PulseEvent {
+  key: ModuleKey;
+  nonce: number;
+  colorHex: number;
+}
+
 interface OutpostCanvas3DProps {
   site: OutpostSite;
   allocation: ModuleAllocation;
+  selectedModule: ModuleKey;
   forecast: SolForecast;
   canEditPower: boolean;
+  isSimulating: boolean;
   commsActive: boolean;
   isTitleMode: boolean;
-  onCycleModule: (key: ModuleKey) => void;
+  pulseEvent: PulseEvent | null;
+  onTapModule: (key: ModuleKey) => void;
 }
 
 const MODULE_META: Array<{ key: ModuleKey; label: string; accent: string }> = [
-  { key: 'scrubber', label: 'O₂ Dome', accent: '#22D3EE' },
+  { key: 'scrubber', label: 'O₂', accent: '#22D3EE' },
   { key: 'greenhouse', label: 'Farm', accent: '#34D399' },
   { key: 'shield', label: 'Shield', accent: '#FBBF24' },
-  { key: 'lab', label: 'Rover Lab', accent: '#818CF8' },
+  { key: 'lab', label: 'Lab', accent: '#818CF8' },
 ];
 
 // Reusable module-scope math objects (zero GC inside animation loop)
@@ -28,6 +37,7 @@ const _projVec = new THREE.Vector3();
 const _raycaster = new THREE.Raycaster();
 const _pointerNdc = new THREE.Vector2();
 const _targetBgColor = new THREE.Color();
+const _focusTarget = new THREE.Vector3();
 
 function detectSoftwareWebGL(): boolean {
   try {
@@ -47,11 +57,14 @@ function detectSoftwareWebGL(): boolean {
 export function OutpostCanvas3D({
   site,
   allocation,
+  selectedModule,
   forecast,
   canEditPower,
+  isSimulating,
   commsActive,
   isTitleMode,
-  onCycleModule,
+  pulseEvent,
+  onTapModule,
 }: OutpostCanvas3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Record<ModuleKey, HTMLButtonElement | null>>({
@@ -67,21 +80,34 @@ export function OutpostCanvas3D({
   const stateRef = useRef({
     site,
     allocation,
+    selectedModule,
     forecast,
     canEditPower,
+    isSimulating,
     commsActive,
     isTitleMode,
-    onCycleModule,
+    pulseEvent,
+    onTapModule,
   });
   stateRef.current = {
     site,
     allocation,
+    selectedModule,
     forecast,
     canEditPower,
+    isSimulating,
     commsActive,
     isTitleMode,
-    onCycleModule,
+    pulseEvent,
+    onTapModule,
   };
+
+  const focusActiveRef = useRef(false);
+  const lastSelectedRef = useRef<ModuleKey>(selectedModule);
+  if (lastSelectedRef.current !== selectedModule) {
+    lastSelectedRef.current = selectedModule;
+    focusActiveRef.current = true;
+  }
 
   const sceneRefs = useRef<{
     scene: THREE.Scene;
@@ -111,7 +137,7 @@ export function OutpostCanvas3D({
     renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = 1.14;
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.style.display = 'block';
@@ -132,15 +158,13 @@ export function OutpostCanvas3D({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x070b16);
-    scene.fog = new THREE.FogExp2(0x070b16, 0.028);
+    scene.fog = new THREE.FogExp2(0x070b16, 0.025);
 
-    // Studio Environment Reflections via RoomEnvironment
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envTex = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = envTex;
     pmremGenerator.dispose();
 
-    // Portrait-optimized PerspectiveCamera framing canyon rim, helipads, central base, and greenhouse
     const initialFov = width / height < 0.56 ? 52 : 46;
     const camera = new THREE.PerspectiveCamera(initialFov, width / height, 0.2, 120);
     camera.position.set(0.2, 9.8, 15.8);
@@ -150,19 +174,24 @@ export function OutpostCanvas3D({
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.06;
     controls.enablePan = false;
-    controls.minDistance = 9.0;
-    controls.maxDistance = 23.0;
+    controls.minDistance = 8.5;
+    controls.maxDistance = 22.5;
     controls.minPolarAngle = 0.35;
     controls.maxPolarAngle = Math.PI * 0.42;
     controls.minAzimuthAngle = -Math.PI * 0.45;
     controls.maxAzimuthAngle = Math.PI * 0.45;
     controls.update();
 
+    const onOrbitStart = () => {
+      focusActiveRef.current = false;
+    };
+    controls.addEventListener('start', onOrbitStart);
+
     // 3-Point Space Lighting Rig
-    const hemiLight = new THREE.HemisphereLight(0x4f6d9a, 0x1e293b, 0.75);
+    const hemiLight = new THREE.HemisphereLight(0x4f6d9a, 0x1e293b, 0.78);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff1d6, 2.2);
+    const keyLight = new THREE.DirectionalLight(0xfff1d6, 2.25);
     keyLight.position.set(9, 13, 8);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.set(1024, 1024);
@@ -176,7 +205,7 @@ export function OutpostCanvas3D({
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x60a5fa, 0.65);
+    const rimLight = new THREE.DirectionalLight(0x60a5fa, 0.68);
     rimLight.position.set(-8, 6, -10);
     scene.add(rimLight);
 
@@ -225,7 +254,6 @@ export function OutpostCanvas3D({
       renderer.compile(scene, camera);
     }
 
-    // Raycasting setup (Layer 1 only for crisp fast taps)
     _raycaster.layers.set(1);
     let hoveredModule: ModuleKey | null = null;
     let pointerDownPos = { x: 0, y: 0 };
@@ -252,10 +280,10 @@ export function OutpostCanvas3D({
       if (!stateRef.current.canEditPower || stateRef.current.isTitleMode) return;
       const dx = e.clientX - pointerDownPos.x;
       const dy = e.clientY - pointerDownPos.y;
-      if (dx * dx + dy * dy > 49) return; // Ignore orbit drags > 7px
+      if (dx * dx + dy * dy > 49) return;
       const hit = getHitModule(e.clientX, e.clientY);
       if (hit) {
-        stateRef.current.onCycleModule(hit);
+        stateRef.current.onTapModule(hit);
       }
     };
 
@@ -278,20 +306,17 @@ export function OutpostCanvas3D({
     renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
 
-    // ResizeObserver for crisp portrait container tracking
     const resizeObserver = new ResizeObserver(() => {
       if (!container) return;
       const w = Math.max(1, container.clientWidth);
       const h = Math.max(1, container.clientHeight);
       camera.aspect = w / h;
-      // Widen FOV slightly on very narrow screens so full canyon-rim outpost fits comfortably
       camera.fov = w / h < 0.56 ? 52 : 46;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     });
     resizeObserver.observe(container);
 
-    // Animation Loop (delta-time driven + Software-WebGL afterDraw pacing)
     const clock = new THREE.Clock();
     let frameId = 0;
     let disposed = false;
@@ -299,6 +324,8 @@ export function OutpostCanvas3D({
     let ringAlpha = 0;
     let shieldAlpha = 0.12;
     let beamAlpha = 0;
+    let lastPulseNonce = -1;
+    let pulseProgress = 1;
 
     function afterDraw(cb: () => void) {
       const gl = renderer.getContext() as WebGL2RenderingContext;
@@ -321,11 +348,22 @@ export function OutpostCanvas3D({
       if (disposed) return;
       const dt = Math.min(clock.getDelta(), 0.05);
       const elapsed = clock.elapsedTime;
-      const { allocation: alloc, forecast: fc, commsActive: comms, isTitleMode: titleMode, site: curSite } =
-        stateRef.current;
+      const {
+        allocation: alloc,
+        selectedModule: selMod,
+        forecast: fc,
+        canEditPower: canEdit,
+        isSimulating: simActive,
+        commsActive: comms,
+        isTitleMode: titleMode,
+        site: curSite,
+        pulseEvent: pEvt,
+      } = stateRef.current;
       const world = sceneRefs.current?.world;
 
-      // Subtle atmospheric lighting shifts for Solar/Jupiter Storms & Mars Dust
+      const simMult = simActive ? 2.4 : 1.0;
+
+      // Atmospheric sky & storm response
       const targetBg =
         curSite === 'moon'
           ? fc.radiationMsv >= 18
@@ -343,19 +381,19 @@ export function OutpostCanvas3D({
       bgCol.lerp(_targetBgColor, 1 - Math.exp(-3 * dt));
       if (scene.fog instanceof THREE.FogExp2) {
         scene.fog.color.copy(bgCol);
-        const targetDensity = curSite === 'mars' && fc.dustStormActive ? 0.044 : 0.025;
+        const targetDensity = curSite === 'mars' && fc.dustStormActive ? 0.044 : 0.024;
         scene.fog.density = THREE.MathUtils.damp(scene.fog.density, targetDensity, 3, dt);
       }
 
       if (world) {
-        // 1. Solar Array tilt & brightness (tilt each wing locally around its mount)
+        // 1. Solar Array local tilt & brightness
         const targetTilt = fc.lunarShadowDip ? 0.15 : 0.48;
         world.solarPanelWings.forEach((wing) => {
           wing.rotation.x = THREE.MathUtils.damp(wing.rotation.x, targetTilt, 4, dt);
         });
         world.solarPanelMat.emissiveIntensity = THREE.MathUtils.damp(
           world.solarPanelMat.emissiveIntensity,
-          fc.dustStormActive ? 0.08 : 0.38,
+          fc.dustStormActive ? 0.08 : 0.42,
           4,
           dt
         );
@@ -363,7 +401,7 @@ export function OutpostCanvas3D({
         // 2. O2 Scrubber Dome glow & rising 3D bubbles
         world.scrubberWindowsMat.emissiveIntensity = THREE.MathUtils.damp(
           world.scrubberWindowsMat.emissiveIntensity,
-          alloc.scrubber > 0 ? 0.6 + alloc.scrubber * 0.45 : 0.08,
+          alloc.scrubber > 0 ? 0.65 + alloc.scrubber * 0.45 : 0.08,
           6,
           dt
         );
@@ -371,20 +409,21 @@ export function OutpostCanvas3D({
         if (alloc.scrubber > 0) {
           world.o2BubblesGroup.children.forEach((b) => {
             const phase = (b.userData.phase as number) || 0;
-            const cycle = ((elapsed * (0.7 + alloc.scrubber * 0.25) + phase) % 1.4) / 1.4;
+            const cycle =
+              ((elapsed * (0.7 + alloc.scrubber * 0.25) * simMult + phase) % 1.4) / 1.4;
             b.position.y = 1.45 + cycle * 1.1;
-            b.scale.setScalar(Math.sin(cycle * Math.PI) * 1.1 + 0.15);
+            b.scale.setScalar(Math.sin(cycle * Math.PI) * 1.15 + 0.15);
           });
         }
 
-        // 3. Hydroponic Farm LEDs
+        // 3. Hydroponic Farm LEDs & Crop Growth
         world.greenhouseLedMat.emissiveIntensity = THREE.MathUtils.damp(
           world.greenhouseLedMat.emissiveIntensity,
-          alloc.greenhouse > 0 ? 0.55 + alloc.greenhouse * 0.5 : 0.05,
+          alloc.greenhouse > 0 ? 0.6 + alloc.greenhouse * 0.5 : 0.05,
           6,
           dt
         );
-        const plantScale = 0.72 + alloc.greenhouse * 0.14;
+        const plantScale = 0.72 + alloc.greenhouse * 0.15;
         world.greenhousePlants.scale.y = THREE.MathUtils.damp(
           world.greenhousePlants.scale.y,
           plantScale,
@@ -392,13 +431,20 @@ export function OutpostCanvas3D({
           dt
         );
 
-        // 4. Radiation Shield Dome & Beacon
+        // 4. Radiation Shield Dome & Storm Ripple
+        const stormHit = fc.radiationMsv >= 18;
         const targetShieldAlpha =
-          alloc.shield === 0 ? 0.0 : 0.08 + alloc.shield * 0.085 + Math.sin(elapsed * 2.5) * 0.025;
+          alloc.shield === 0
+            ? 0.0
+            : 0.09 +
+              alloc.shield * 0.08 +
+              (stormHit ? Math.sin(elapsed * 5) * 0.055 : Math.sin(elapsed * 2.5) * 0.02);
         shieldAlpha = THREE.MathUtils.damp(shieldAlpha, targetShieldAlpha, 5, dt);
         world.shieldDomeMat.opacity = shieldAlpha;
         world.shieldDomeMesh.visible = shieldAlpha > 0.01;
-        world.shieldDomeMat.color.setHex(alloc.shield >= 2 ? 0x38bdf8 : 0xf59e0b);
+        world.shieldDomeMat.color.setHex(
+          stormHit && alloc.shield < 2 ? 0xf43f5e : alloc.shield >= 2 ? 0x38bdf8 : 0xf59e0b
+        );
         world.shieldBeaconMat.emissiveIntensity = THREE.MathUtils.damp(
           world.shieldBeaconMat.emissiveIntensity,
           alloc.shield > 0 ? 0.6 + alloc.shield * 0.55 : 0.1,
@@ -407,15 +453,21 @@ export function OutpostCanvas3D({
         );
 
         // 5. Comms Dish sweep & Signal Beam
-        world.commsDishPivot.rotation.y = Math.sin(elapsed * 0.55) * 0.45;
-        const targetBeam = comms ? 0.26 + Math.sin(elapsed * 4) * 0.1 : alloc.lab > 0 ? 0.08 : 0;
+        world.commsDishPivot.rotation.y = Math.sin(elapsed * 0.55 * simMult) * 0.45;
+        const targetBeam = comms
+          ? 0.28 + Math.sin(elapsed * 4) * 0.1
+          : alloc.lab > 0
+            ? simActive
+              ? 0.22
+              : 0.09
+            : 0;
         beamAlpha = THREE.MathUtils.damp(beamAlpha, targetBeam, 5, dt);
         world.commsBeamMat.opacity = beamAlpha;
         world.commsBeamMesh.visible = beamAlpha > 0.01;
 
-        // 6. 6-Wheel Explorer Rover patrol loop in front-right clearing (clear of pads & astronauts)
+        // 6. 6-Wheel Explorer Rover patrol in front-right clearing
         if (alloc.lab > 0 || titleMode) {
-          const speed = titleMode ? 0.34 : 0.36 + alloc.lab * 0.16;
+          const speed = (titleMode ? 0.34 : 0.36 + alloc.lab * 0.16) * simMult;
           roverAngle += dt * speed;
           const rx = 2.4 + Math.cos(roverAngle) * 1.15;
           const rz = 3.9 + Math.sin(roverAngle) * 0.75;
@@ -424,27 +476,86 @@ export function OutpostCanvas3D({
           world.roverGroup.position.set(rx, 0, rz);
           world.roverGroup.lookAt(nextX, 0, nextZ);
           world.roverWheels.forEach((w) => {
-            w.rotation.x += dt * 4.5;
+            w.rotation.x += dt * 4.5 * simMult;
           });
         }
 
-        // 7. Hover Selection Ring
-        if (hoveredModule) {
-          const pos = world.modulePositions[hoveredModule];
+        // 7. Gentle Astronaut idle/walk animation along footpath
+        world.astronauts.forEach((astro, idx) => {
+          const bob = Math.abs(Math.sin(elapsed * 3.0 + idx * 1.5)) * 0.04;
+          astro.position.y = bob;
+          astro.rotation.z = Math.sin(elapsed * 2.2 + idx) * 0.04;
+        });
+
+        // 8. Atmospheric Weather Particles drift (zero allocations)
+        world.weatherParticles.rotation.y += dt * (fc.dustStormActive ? 0.35 : 0.06) * simMult;
+        world.weatherParticles.position.y = Math.sin(elapsed * 0.7) * 0.15;
+        const targetPartOpacity = fc.dustStormActive
+          ? 0.65
+          : fc.radiationMsv >= 18
+            ? 0.55
+            : curSite === 'europa'
+              ? 0.36
+              : 0.2;
+        world.weatherParticleMat.opacity = THREE.MathUtils.damp(
+          world.weatherParticleMat.opacity,
+          targetPartOpacity,
+          4,
+          dt
+        );
+        world.weatherParticleMat.color.setHex(
+          fc.radiationMsv >= 18 ? 0xfbbf24 : curSite === 'mars' ? 0xfdba74 : 0xbae6fd
+        );
+
+        // 9. Active / Hover Selection Ring
+        const ringModule = hoveredModule ?? (canEdit ? selMod : null);
+        if (ringModule && !titleMode && !simActive) {
+          const pos = world.modulePositions[ringModule];
           world.hoverRingMesh.position.set(pos.x, 0.05, pos.z);
-          ringAlpha = THREE.MathUtils.damp(ringAlpha, 0.85, 10, dt);
+          const pulseScale = 1 + Math.sin(elapsed * 4.5) * 0.05;
+          world.hoverRingMesh.scale.setScalar(pulseScale);
+          ringAlpha = THREE.MathUtils.damp(ringAlpha, hoveredModule ? 0.92 : 0.72, 10, dt);
         } else {
           ringAlpha = THREE.MathUtils.damp(ringAlpha, 0, 10, dt);
         }
         world.hoverRingMat.opacity = ringAlpha;
 
-        // 8. Project 3D building positions to 2D floating badge anchors without React re-renders
+        // 10. Expanding Tap / Power-Up Energy Pulse Ring
+        if (pEvt && pEvt.nonce !== lastPulseNonce) {
+          lastPulseNonce = pEvt.nonce;
+          pulseProgress = 0;
+          const pPos = world.modulePositions[pEvt.key];
+          world.pulseRingMesh.position.set(pPos.x, 0.08, pPos.z);
+          world.pulseRingMat.color.setHex(pEvt.colorHex);
+          world.pulseRingMesh.visible = true;
+        }
+        if (pulseProgress < 1) {
+          pulseProgress = Math.min(1, pulseProgress + dt * 2.2);
+          const scale = 1.0 + pulseProgress * 1.45;
+          world.pulseRingMesh.scale.setScalar(scale);
+          world.pulseRingMat.opacity = (1 - pulseProgress) * 0.85;
+          if (pulseProgress >= 1) {
+            world.pulseRingMesh.visible = false;
+          }
+        }
+
+        // 11. Gentle Camera Target Nudge toward Selected Module during Allocate Power
+        if (focusActiveRef.current && canEdit && !titleMode) {
+          const mPos = world.modulePositions[selMod];
+          _focusTarget.set(-0.3 + mPos.x * 0.28, 0.55, 0.35 + mPos.z * 0.25);
+          controls.target.lerp(_focusTarget, 1 - Math.exp(-4.5 * dt));
+          if (controls.target.distanceToSquared(_focusTarget) < 0.002) {
+            focusActiveRef.current = false;
+          }
+        }
+
+        // 12. Project 3D building positions to clean game power-pip markers
         const cw = renderer.domElement.clientWidth;
         const ch = renderer.domElement.clientHeight;
         MODULE_META.forEach(({ key }) => {
           const btn = labelRefs.current[key];
           if (!btn) return;
-          if (titleMode) {
+          if (titleMode || simActive) {
             btn.style.opacity = '0';
             btn.style.pointerEvents = 'none';
             return;
@@ -464,9 +575,8 @@ export function OutpostCanvas3D({
         });
       }
 
-      // Title screen gentle orbital camera sweep
       if (titleMode && !isSoftwareGl) {
-        const camOrbit = Math.sin(elapsed * 0.2) * 2.2;
+        const camOrbit = Math.sin(elapsed * 0.22) * 2.4;
         camera.position.x = THREE.MathUtils.damp(camera.position.x, camOrbit, 2, dt);
       }
 
@@ -487,6 +597,7 @@ export function OutpostCanvas3D({
       cancelAnimationFrame(frameId);
       clearTimeout(frameId);
       resizeObserver.disconnect();
+      controls.removeEventListener('start', onOrbitStart);
       controls.dispose();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
@@ -509,7 +620,7 @@ export function OutpostCanvas3D({
     };
   }, []);
 
-  // Swap 3D planet terrain & lighting cleanly when user switches Moon <-> Mars
+  // Swap 3D planet terrain & lighting cleanly when user switches Moon / Mars / Europa
   useEffect(() => {
     const refs = sceneRefs.current;
     if (!refs) return;
@@ -554,19 +665,18 @@ export function OutpostCanvas3D({
       {/* Fallback UI if WebGL context is unavailable/lost */}
       {webglLost && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0B1120] p-6 text-center">
-          <p className="font-display font-bold text-lg text-amber-300">
-            3D Graphics Paused
-          </p>
+          <p className="font-display font-bold text-lg text-amber-300">3D Graphics Paused</p>
           <p className="text-xs text-slate-300 mt-1">
-            Use the power buttons in the Command Deck below to continue running your outpost.
+            Use the Command Deck below to continue running your outpost.
           </p>
         </div>
       )}
 
-      {/* Projected Floating 3D Module Power Tags (Zero blur, tap-friendly >= 40px) */}
+      {/* Clean Game Power-Pip Markers above 3D Buildings */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
         {MODULE_META.map(({ key, label, accent }) => {
           const level = allocation[key];
+          const isSelected = canEditPower && selectedModule === key;
           return (
             <button
               key={key}
@@ -574,21 +684,28 @@ export function OutpostCanvas3D({
                 labelRefs.current[key] = el;
               }}
               type="button"
-              disabled={!canEditPower || isTitleMode}
-              onClick={() => onCycleModule(key)}
-              aria-label={`${label}: ${level} of 3 power units. Tap to adjust.`}
+              disabled={!canEditPower || isTitleMode || isSimulating}
+              onClick={() => onTapModule(key)}
+              aria-label={`${label}: level ${level} of 3. Tap to select or boost.`}
               style={{ opacity: 0, left: 0, top: 0 }}
-              className={`absolute px-2.5 py-1 rounded-lg bg-[#0B1120]/90 border border-slate-700/90 text-[11px] font-semibold text-white shadow-lg flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                canEditPower ? 'cursor-pointer hover:border-amber-400' : 'cursor-default'
-              }`}
+              className={`absolute px-2 py-1 rounded-lg text-[11px] font-bold text-white shadow-lg flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                isSelected
+                  ? 'bg-[#172542] border-2 border-amber-400'
+                  : 'bg-[#0B1120]/90 border border-slate-700'
+              } ${canEditPower ? 'cursor-pointer hover:border-amber-300' : 'cursor-default'}`}
             >
-              <span
-                className="w-2 h-2 rounded-xs shrink-0"
-                style={{ backgroundColor: level > 0 ? accent : '#475569' }}
-                aria-hidden="true"
-              />
               <span>{label}</span>
-              <span className="font-mono tabular-nums text-amber-300">{level}/3</span>
+              <span className="flex items-center gap-0.5" aria-hidden="true">
+                {[1, 2, 3].map((pip) => (
+                  <span
+                    key={pip}
+                    className="w-1.5 h-2.5 rounded-[2px]"
+                    style={{
+                      backgroundColor: level >= pip ? accent : '#334155',
+                    }}
+                  />
+                ))}
+              </span>
             </button>
           );
         })}

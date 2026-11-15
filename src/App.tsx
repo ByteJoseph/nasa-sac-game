@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -12,7 +12,6 @@ import {
   Plus,
   Radio,
   RotateCcw,
-  Shield,
   Sprout,
   Volume2,
   VolumeX,
@@ -22,16 +21,14 @@ import {
 import { GlossaryTerm } from './components/GlossaryTerm';
 import { MissionEndModal } from './components/MissionEndModal';
 import { NasaGuideModal } from './components/NasaGuideModal';
-import { OutpostCanvas3D } from './components/OutpostCanvas3D';
+import { OutpostCanvas3D, type PulseEvent } from './components/OutpostCanvas3D';
 import { TitleScreen } from './components/TitleScreen';
 import { buildSolForecast, pickDilemmaForSol, SITE_PROFILES } from './data/nasaScienceData';
 import {
   applyDeltas,
   calculatePowerAllocationDeltas,
   getInitialResources,
-  getLiveTradeOffHint,
   getModuleUsedPower,
-  getResourceStatusLabel,
   TOTAL_SOLS,
 } from './engine/simulation';
 import type {
@@ -84,9 +81,85 @@ const INITIAL_ALLOCATION: ModuleAllocation = {
   lab: 1,
 };
 
+const MODULE_ORDER: ModuleKey[] = ['scrubber', 'greenhouse', 'shield', 'lab'];
+
+const MODULE_INFO: Record<
+  ModuleKey,
+  { name: string; shortName: string; colorHex: number; dotClass: string }
+> = {
+  scrubber: {
+    name: 'O₂ Dome',
+    shortName: 'O₂',
+    colorHex: 0x22d3ee,
+    dotClass: 'bg-cyan-400',
+  },
+  greenhouse: {
+    name: 'Hydroponic Farm',
+    shortName: 'Farm',
+    colorHex: 0x34d399,
+    dotClass: 'bg-emerald-400',
+  },
+  shield: {
+    name: 'Radiation Shield',
+    shortName: 'Shield',
+    colorHex: 0xfbbf24,
+    dotClass: 'bg-amber-400',
+  },
+  lab: {
+    name: 'Rover & Comms Lab',
+    shortName: 'Lab',
+    colorHex: 0x818cf8,
+    dotClass: 'bg-indigo-400',
+  },
+};
+
 function formatDelta(n: number): string {
-  if (n > 0) return `+${n}`;
-  return `${n}`;
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
+function getModuleEffectSummary(
+  key: ModuleKey,
+  level: number,
+  site: OutpostSite,
+  radiationMsv: number
+): string {
+  if (key === 'scrubber') {
+    const gain =
+      site === 'moon'
+        ? [0, 10, 19, 27][level]
+        : site === 'europa'
+          ? [0, 11, 20, 28][level]
+          : [0, 9, 17, 25][level];
+    return level === 0 ? 'Off · Crew air drops faster' : `Produces +${gain}% Oxygen`;
+  }
+  if (key === 'greenhouse') {
+    const gain = [0, 8, 16, 23][level];
+    if (level === 0) return 'Off · Pantry drains faster';
+    return level >= 2 ? `Grows +${gain}% Food & +2% O₂` : `Grows +${gain}% Food`;
+  }
+  if (key === 'shield') {
+    const pct = [10, 45, 78, 94][level];
+    const danger = radiationMsv >= 18 ? ' (Storm Today!)' : '';
+    return `Blocks ${pct}% radiation${danger}`;
+  }
+  const sci = (site === 'europa' ? [0, 12, 22, 30] : [0, 11, 20, 28])[level];
+  return level === 0 ? 'Parked · Saves airlock Oxygen' : `+${sci}% Science · uses -${level * 2}% O₂`;
+}
+
+function getDeltaChips(deltas: ResourceDeltas): Array<{ label: string; positive: boolean }> {
+  const entries: Array<{ key: keyof ResourceDeltas; name: string }> = [
+    { key: 'power', name: 'Pwr' },
+    { key: 'oxygen', name: 'O₂' },
+    { key: 'food', name: 'Food' },
+    { key: 'health', name: 'Hlth' },
+    { key: 'science', name: 'Sci' },
+  ];
+  return entries
+    .filter((e) => deltas[e.key] !== 0)
+    .map((e) => ({
+      label: `${formatDelta(deltas[e.key])} ${e.name}`,
+      positive: deltas[e.key] > 0,
+    }));
 }
 
 export default function App() {
@@ -101,6 +174,8 @@ export default function App() {
   // Active Mission State
   const [sol, setSol] = useState(1);
   const [phase, setPhase] = useState<SolPhase>('ALLOCATE_POWER');
+  const [selectedModule, setSelectedModule] = useState<ModuleKey>('scrubber');
+  const [pulseEvent, setPulseEvent] = useState<PulseEvent | null>(null);
   const [resources, setResources] = useState<CoreResources>(() =>
     getInitialResources('mars', 'cadet')
   );
@@ -110,9 +185,21 @@ export default function App() {
   const [chosenOption, setChosenOption] = useState<DilemmaOption | null>(null);
   const [outcomeNotes, setOutcomeNotes] = useState<string[]>([]);
   const [solNetDeltas, setSolNetDeltas] = useState<ResourceDeltas | null>(null);
+  const [simPopups, setSimPopups] = useState<Array<{ label: string; positive: boolean }>>([]);
   const [logs, setLogs] = useState<SolLogEntry[]>([]);
   const [failureReason, setFailureReason] = useState('');
   const [commsSecondsLeft, setCommsSecondsLeft] = useState(0);
+
+  const simTimerRef = useRef<number | null>(null);
+
+  const clearSimTimer = useCallback(() => {
+    if (simTimerRef.current !== null) {
+      window.clearTimeout(simTimerRef.current);
+      simTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearSimTimer, [clearSimTimer]);
 
   // Fetch live space weather on mount (falls back honestly to curated NASA archive)
   useEffect(() => {
@@ -140,13 +227,10 @@ export default function App() {
     [allocation, forecast, site, difficulty]
   );
 
-  const liveTradeOffHint = useMemo(
-    () => getLiveTradeOffHint(allocation, predictedPowerDeltas, forecast, site),
-    [allocation, predictedPowerDeltas, forecast, site]
-  );
-
   const usedPowerUnits = getModuleUsedPower(allocation);
   const maxAllowedUnits = forecast.solarBudget + (resources.power >= 20 ? 2 : 0);
+  const remainingSolarBars = Math.max(0, forecast.solarBudget - usedPowerUnits);
+  const overdrivenBars = Math.max(0, usedPowerUnits - forecast.solarBudget);
 
   useEffect(() => {
     if (screen !== 'PLAYING' || phase !== 'SOL_DILEMMA' || !activeDilemma?.requiresCommsDelay) {
@@ -166,12 +250,22 @@ export default function App() {
     });
   }, []);
 
+  const triggerPulse = useCallback((key: ModuleKey) => {
+    setPulseEvent({
+      key,
+      nonce: Date.now() + Math.random(),
+      colorHex: MODULE_INFO[key].colorHex,
+    });
+  }, []);
+
   const startMission = useCallback(
     (overrideSite?: OutpostSite, overrideDiff?: DifficultyMode) => {
+      clearSimTimer();
       const targetSite = overrideSite ?? site;
       const targetDiff = overrideDiff ?? difficulty;
       setSol(1);
       setPhase('ALLOCATE_POWER');
+      setSelectedModule('scrubber');
       setDeckCollapsed(false);
       setResources(getInitialResources(targetSite, targetDiff));
       setAllocation({
@@ -185,12 +279,13 @@ export default function App() {
       setChosenOption(null);
       setOutcomeNotes([]);
       setSolNetDeltas(null);
+      setSimPopups([]);
       setLogs([]);
       setFailureReason('');
       setScreen('PLAYING');
       soundEngine.playSolLaunch();
     },
-    [site, difficulty]
+    [site, difficulty, clearSimTimer]
   );
 
   const adjustModulePower = useCallback(
@@ -205,15 +300,22 @@ export default function App() {
           return prev;
         }
         soundEngine.playPowerAdjust(nextVal);
+        triggerPulse(key);
         return nextAlloc;
       });
     },
-    [phase, screen, maxAllowedUnits]
+    [phase, screen, maxAllowedUnits, triggerPulse]
   );
 
-  const cycleModulePower = useCallback(
+  const handleTap3DModule = useCallback(
     (key: ModuleKey) => {
       if (phase !== 'ALLOCATE_POWER' || screen !== 'PLAYING') return;
+      if (selectedModule !== key) {
+        setSelectedModule(key);
+        triggerPulse(key);
+        soundEngine.playPowerAdjust(allocation[key]);
+        return;
+      }
       setAllocation((prev) => {
         const currentVal = prev[key];
         let nextVal = (currentVal + 1) % 4;
@@ -222,10 +324,11 @@ export default function App() {
           nextVal = 0;
         }
         soundEngine.playPowerAdjust(nextVal);
+        triggerPulse(key);
         return { ...prev, [key]: nextVal };
       });
     },
-    [phase, screen, maxAllowedUnits]
+    [phase, screen, selectedModule, allocation, maxAllowedUnits, triggerPulse]
   );
 
   const checkFailure = useCallback((nextRes: CoreResources): string | null => {
@@ -244,27 +347,36 @@ export default function App() {
     const { next, secondaryNotes } = applyDeltas(resources, predictedPowerDeltas);
     setResources(next);
     setOutcomeNotes(secondaryNotes);
-
-    const failMsg = checkFailure(next);
-    if (failMsg) {
-      setFailureReason(failMsg);
-      setScreen('MISSION_FAILED');
-      soundEngine.playFailure();
-      return;
-    }
-
-    const dilemma = pickDilemmaForSol(sol, site, forecast, usedDilemmaIds);
-    setActiveDilemma(dilemma);
-    setUsedDilemmaIds((prev) => [...prev, dilemma.id]);
-    setCommsSecondsLeft(site === 'europa' ? 2580 : site === 'mars' ? 864 : 3);
+    setSimPopups(getDeltaChips(predictedPowerDeltas));
+    setPhase('SIMULATING_SOL');
     setDeckCollapsed(false);
-    setPhase('SOL_DILEMMA');
-    soundEngine.playDilemmaAlert(forecast.radiationMsv >= 18);
+    soundEngine.playSolLaunch();
+
+    clearSimTimer();
+    simTimerRef.current = window.setTimeout(() => {
+      simTimerRef.current = null;
+      const failMsg = checkFailure(next);
+      if (failMsg) {
+        setFailureReason(failMsg);
+        setScreen('MISSION_FAILED');
+        soundEngine.playFailure();
+        return;
+      }
+
+      const dilemma = pickDilemmaForSol(sol, site, forecast, usedDilemmaIds);
+      setActiveDilemma(dilemma);
+      setUsedDilemmaIds((prev) => [...prev, dilemma.id]);
+      setCommsSecondsLeft(site === 'europa' ? 2580 : site === 'mars' ? 864 : 3);
+      setSimPopups([]);
+      setPhase('SOL_DILEMMA');
+      soundEngine.playDilemmaAlert(forecast.radiationMsv >= 18);
+    }, 1150);
   }, [
     phase,
     screen,
     resources,
     predictedPowerDeltas,
+    clearSimTimer,
     checkFailure,
     sol,
     site,
@@ -368,7 +480,7 @@ export default function App() {
         return;
       }
       if (e.key === 'h' || e.key === 'H') {
-        if (screen === 'PLAYING') setDeckCollapsed((p) => !p);
+        if (screen === 'PLAYING' && phase !== 'SIMULATING_SOL') setDeckCollapsed((p) => !p);
         return;
       }
       if (e.key === 'Escape') {
@@ -391,10 +503,12 @@ export default function App() {
 
       if (screen === 'PLAYING') {
         if (phase === 'ALLOCATE_POWER') {
-          if (e.key === '1') cycleModulePower('scrubber');
-          if (e.key === '2') cycleModulePower('greenhouse');
-          if (e.key === '3') cycleModulePower('shield');
-          if (e.key === '4') cycleModulePower('lab');
+          if (e.key === '1') setSelectedModule('scrubber');
+          if (e.key === '2') setSelectedModule('greenhouse');
+          if (e.key === '3') setSelectedModule('shield');
+          if (e.key === '4') setSelectedModule('lab');
+          if (e.key === '+' || e.key === '=') adjustModulePower(selectedModule, 1);
+          if (e.key === '-' || e.key === '_') adjustModulePower(selectedModule, -1);
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             handleRunSolPower();
@@ -412,49 +526,68 @@ export default function App() {
     guideOpen,
     screen,
     phase,
+    selectedModule,
     toggleMute,
     startMission,
-    cycleModulePower,
+    adjustModulePower,
     handleRunSolPower,
     handleNextSol,
   ]);
 
   const siteProfile = SITE_PROFILES[site];
 
+  // Present the 2 sharpest contrasting options per dilemma (Life Support vs Risk/Economy)
+  const binaryOptions: DilemmaOption[] = useMemo(() => {
+    if (!activeDilemma) return [];
+    return [activeDilemma.options[0], activeDilemma.options[2]];
+  }, [activeDilemma]);
+
+  // Compact 1-line weather alert for top of Command Deck
+  const weatherCueText =
+    forecast.radiationMsv >= 18
+      ? `${forecast.flareClass} Radiation Surge (${forecast.radiationMsv} mSv) — Shield up!`
+      : forecast.dustStormActive
+        ? `Dust Storm — Solar cut to ${forecast.solarBudget} bars`
+        : forecast.lunarShadowDip
+          ? `Shadow Dip — Solar trimmed to ${forecast.solarBudget} bars`
+          : `${forecast.title} · ${forecast.solarBudget} Solar Bars`;
+
   return (
     <div className="w-screen h-dvh overflow-hidden bg-[#04070F] flex items-center justify-center">
       {/* Dedicated Portrait Game Shell (9:16 mobile aspect on desktop, edge-to-edge on phones) */}
       <div className="relative w-full max-w-[460px] h-dvh overflow-hidden bg-[#070B16] sm:border-x sm:border-slate-800/90 shadow-2xl flex flex-col">
-        {/* Continuous 3D WebGL Outpost Scene (runs across Title & Active Play) */}
+        {/* Continuous 3D WebGL Outpost Scene */}
         <div className="relative flex-1 min-h-0">
           <OutpostCanvas3D
             site={site}
             allocation={allocation}
+            selectedModule={selectedModule}
             forecast={forecast}
             canEditPower={screen === 'PLAYING' && phase === 'ALLOCATE_POWER'}
+            isSimulating={screen === 'PLAYING' && phase === 'SIMULATING_SOL'}
             commsActive={
               screen === 'PLAYING' &&
               phase === 'SOL_DILEMMA' &&
               Boolean(activeDilemma?.requiresCommsDelay)
             }
             isTitleMode={screen === 'TITLE_MENU'}
-            onCycleModule={cycleModulePower}
+            pulseEvent={pulseEvent}
+            onTapModule={handleTap3DModule}
           />
 
-          {/* Top Telemetry HUD (Playing / Paused / End) */}
+          {/* Lean Top Game HUD */}
           {screen !== 'TITLE_MENU' && (
-            <header className="absolute top-0 inset-x-0 z-20 bg-[#0B1120]/92 border-b border-slate-800 px-3 py-2 space-y-2 pointer-events-auto">
-              {/* Row 1: Site, Sol, Utility buttons */}
+            <header className="absolute top-0 inset-x-0 z-20 bg-[#0B1120]/90 border-b border-slate-800 px-3 py-2 space-y-1.5 pointer-events-auto">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 text-xs">
                   <span className="font-display font-bold text-white truncate">
-                    {siteProfile.shortName}
+                    {site === 'moon' ? 'Moon' : site === 'mars' ? 'Mars' : 'Europa'}
                   </span>
                   <span className="text-slate-500" aria-hidden="true">
                     ·
                   </span>
                   <span className="font-mono font-bold text-amber-300 tabular-nums shrink-0">
-                    <GlossaryTerm termKey="Sol" label={`Sol ${sol}/${TOTAL_SOLS}`} />
+                    Sol {sol}/{TOTAL_SOLS}
                   </span>
                 </div>
 
@@ -462,16 +595,16 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setGuideOpen(true)}
-                    className="min-h-[36px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-slate-100 flex items-center gap-1 cursor-pointer"
-                    aria-label="Open NASA Data and Science Guide"
+                    className="min-h-[36px] px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-slate-100 flex items-center gap-1 cursor-pointer"
+                    aria-label="Open NASA Science Guide"
                   >
                     <BookOpen className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                    <span>NASA</span>
+                    <span>Guide</span>
                   </button>
                   <button
                     type="button"
                     onClick={toggleMute}
-                    className="min-h-[36px] min-w-[36px] p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
+                    className="min-h-[36px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
                     aria-label={muted ? 'Unmute sound' : 'Mute sound'}
                   >
                     {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
@@ -479,7 +612,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setScreen('PAUSED')}
-                    className="min-h-[36px] min-w-[36px] p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
+                    className="min-h-[36px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center cursor-pointer"
                     aria-label="Pause Mission"
                   >
                     <Pause className="w-3.5 h-3.5" />
@@ -487,77 +620,62 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Row 2: 5 Portrait Telemetry Meters */}
+              {/* Clean 5-Vital Game Bars (Zero Sub-Text Clutter) */}
               <div className="grid grid-cols-5 gap-1.5">
                 <HudMeter
                   label="Pwr"
                   value={resources.power}
-                  previewDelta={phase === 'ALLOCATE_POWER' ? predictedPowerDeltas.power : undefined}
                   icon={<Zap className="w-3 h-3 text-amber-400" aria-hidden="true" />}
                   barColor="bg-amber-400"
                 />
                 <HudMeter
                   label="O₂"
                   value={resources.oxygen}
-                  previewDelta={phase === 'ALLOCATE_POWER' ? predictedPowerDeltas.oxygen : undefined}
                   icon={<Wind className="w-3 h-3 text-cyan-400" aria-hidden="true" />}
                   barColor="bg-cyan-400"
                 />
                 <HudMeter
                   label="Food"
                   value={resources.food}
-                  previewDelta={phase === 'ALLOCATE_POWER' ? predictedPowerDeltas.food : undefined}
                   icon={<Sprout className="w-3 h-3 text-emerald-400" aria-hidden="true" />}
                   barColor="bg-emerald-400"
                 />
                 <HudMeter
                   label="Hlth"
                   value={resources.health}
-                  previewDelta={phase === 'ALLOCATE_POWER' ? predictedPowerDeltas.health : undefined}
                   icon={<Activity className="w-3 h-3 text-sky-400" aria-hidden="true" />}
                   barColor="bg-sky-400"
                 />
                 <HudMeter
                   label="Sci"
                   value={resources.science}
-                  previewDelta={phase === 'ALLOCATE_POWER' ? predictedPowerDeltas.science : undefined}
                   icon={<FlaskConical className="w-3 h-3 text-indigo-400" aria-hidden="true" />}
                   barColor="bg-indigo-400"
-                  hideStatusWord
+                  isGoal
                 />
               </div>
             </header>
           )}
 
-          {/* Compact Floating Sol Forecast Strip right below Top HUD */}
-          {screen === 'PLAYING' && (
-            <div className="absolute top-[102px] inset-x-3 z-20 pointer-events-none flex justify-between items-start gap-2">
-              <div className="pointer-events-auto max-w-[290px] rounded-xl bg-[#0B1120]/88 border border-slate-700/80 px-3 py-2 shadow-lg">
-                <div className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="font-display font-bold text-amber-300 truncate">
-                    {forecast.title}
-                  </span>
-                  <span className="font-mono tabular-nums text-slate-300 shrink-0">
-                    {forecast.flareClass} · {forecast.radiationMsv} mSv
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-200 leading-snug mt-0.5">
-                  {forecast.weatherSummary}{' '}
-                  {forecast.radiationMsv >= 18 ? (
-                    <GlossaryTerm termKey="Radiation (mSv)" label="mSv?" />
-                  ) : forecast.dustStormActive ? (
-                    <GlossaryTerm termKey="Dust Opacity" label="Dust?" />
-                  ) : site === 'europa' ? (
-                    <GlossaryTerm termKey="RTG Power" label="4% Sun?" />
-                  ) : (
-                    <GlossaryTerm termKey="Electrolysis" label="O₂?" />
-                  )}
-                </p>
-              </div>
+          {/* Animated Resource Delta Popups during Sol Simulation */}
+          {screen === 'PLAYING' && phase === 'SIMULATING_SOL' && simPopups.length > 0 && (
+            <div className="absolute inset-x-4 bottom-6 z-20 pointer-events-none flex flex-wrap items-center justify-center gap-2">
+              {simPopups.map((chip) => (
+                <span
+                  key={chip.label}
+                  className={`px-3 py-1.5 rounded-xl font-mono font-bold text-xs shadow-lg border ${
+                    chip.positive
+                      ? 'bg-emerald-950/95 border-emerald-500/70 text-emerald-300'
+                      : 'bg-rose-950/95 border-rose-500/70 text-rose-300'
+                  }`}
+                >
+                  {chip.label}
+                </span>
+              ))}
             </div>
           )}
 
-          {/* Title Screen Overlay over live 3D Outpost */}
+          {/* Title Screen Overlay */}
           {screen === 'TITLE_MENU' && (
             <TitleScreen
               site={site}
@@ -573,142 +691,190 @@ export default function App() {
           )}
         </div>
 
-        {/* Collapsible Portrait Bottom Command Deck */}
+        {/* Focused Bottom Command Deck (One Clear Decision at a Time) */}
         {screen !== 'TITLE_MENU' && (
           <section
             aria-label="Mission Command Deck"
             className="shrink-0 relative z-20 bg-[#0D1526] border-t border-slate-800"
           >
-            {/* Collapse/Expand Handle */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-800/80 bg-[#0A101E]">
-              <span className="text-[11px] font-semibold text-slate-300">
-                {phase === 'ALLOCATE_POWER'
-                  ? `Solar Supply: ${forecast.solarBudget} units`
-                  : phase === 'SOL_DILEMMA'
-                    ? 'Engineering Decision'
-                    : `Sol ${sol} Summary`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setDeckCollapsed((p) => !p)}
-                className="min-h-[32px] px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 flex items-center gap-1 cursor-pointer"
-                aria-expanded={!deckCollapsed}
+            {/* Slim Collapse Header / Weather Alert Line */}
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-slate-800/80 bg-[#0A101E]">
+              <span
+                className={`text-[11px] font-semibold truncate ${
+                  phase === 'ALLOCATE_POWER' &&
+                  (forecast.radiationMsv >= 18 || forecast.dustStormActive)
+                    ? 'text-amber-300'
+                    : 'text-slate-300'
+                }`}
               >
-                {deckCollapsed ? (
-                  <>
-                    <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Show Deck</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Hide Deck</span>
-                  </>
-                )}
-              </button>
+                {phase === 'ALLOCATE_POWER'
+                  ? weatherCueText
+                  : phase === 'SIMULATING_SOL'
+                    ? `Running Sol ${sol} systems...`
+                    : phase === 'SOL_DILEMMA'
+                      ? 'Mission Choice'
+                      : `Sol ${sol} Complete`}
+              </span>
+              {phase !== 'SIMULATING_SOL' && (
+                <button
+                  type="button"
+                  onClick={() => setDeckCollapsed((p) => !p)}
+                  className="min-h-[30px] px-2 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                  aria-expanded={!deckCollapsed}
+                >
+                  {deckCollapsed ? (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Open</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>View 3D</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
-            {!deckCollapsed && (
-              <div className="p-3 space-y-2.5 max-h-[46dvh] overflow-y-auto">
+            {phase === 'SIMULATING_SOL' && (
+              <div className="px-4 py-4">
+                <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div className="h-full bg-amber-400 rounded-full w-full transition-transform duration-1000 origin-left" />
+                </div>
+              </div>
+            )}
+
+            {!deckCollapsed && phase !== 'SIMULATING_SOL' && (
+              <div className="p-3 space-y-2.5 max-h-[42dvh] overflow-y-auto">
+                {/* PHASE 1: SINGLE-FOCUS MODULE POWER ALLOCATION */}
                 {phase === 'ALLOCATE_POWER' && (
                   <>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-300">
-                        Tap 3D buildings or adjust below:
-                      </span>
+                    {/* Visual Power Core Pool */}
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-300 font-medium">Solar Power:</span>
+                        <div className="flex items-center gap-1" aria-hidden="true">
+                          {Array.from({ length: forecast.solarBudget }).map((_, idx) => (
+                            <span
+                              key={idx}
+                              className={`w-3.5 h-2.5 rounded-[3px] ${
+                                idx < usedPowerUnits ? 'bg-amber-400' : 'bg-slate-700'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
                       <span
-                        className={`font-mono font-semibold tabular-nums ${
-                          usedPowerUnits > forecast.solarBudget
+                        className={`font-mono font-bold tabular-nums ${
+                          overdrivenBars > 0
                             ? 'text-rose-300'
-                            : usedPowerUnits < forecast.solarBudget
+                            : remainingSolarBars > 0
                               ? 'text-emerald-300'
                               : 'text-slate-300'
                         }`}
                       >
-                        {usedPowerUnits > forecast.solarBudget
-                          ? `Battery -${(usedPowerUnits - forecast.solarBudget) * 11}%`
-                          : usedPowerUnits < forecast.solarBudget
-                            ? `Battery +${(forecast.solarBudget - usedPowerUnits) * 7}%`
-                            : '0% Battery Net'}
+                        {overdrivenBars > 0
+                          ? `Overdrive (-${overdrivenBars * 11}% Bat)`
+                          : remainingSolarBars > 0
+                            ? `${remainingSolarBars} free (+${remainingSolarBars * 7}% Bat)`
+                            : 'Full Solar Used'}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <PowerControlCard
-                        shortcut="1"
-                        title="O₂ Dome"
-                        level={allocation.scrubber}
-                        effectNote={
-                          allocation.scrubber === 0
-                            ? 'Off (-O₂)'
-                            : `+${
-                                site === 'moon'
-                                  ? [0, 10, 19, 27][allocation.scrubber]
-                                  : site === 'europa'
-                                    ? [0, 11, 20, 28][allocation.scrubber]
-                                    : [0, 9, 17, 25][allocation.scrubber]
-                              } O₂`
-                        }
-                        canIncrement={allocation.scrubber < 3 && usedPowerUnits < maxAllowedUnits}
-                        canDecrement={allocation.scrubber > 0}
-                        onIncrement={() => adjustModulePower('scrubber', 1)}
-                        onDecrement={() => adjustModulePower('scrubber', -1)}
-                      />
-                      <PowerControlCard
-                        shortcut="2"
-                        title="Farm"
-                        level={allocation.greenhouse}
-                        effectNote={
-                          allocation.greenhouse === 0
-                            ? 'Off (-Food)'
-                            : `+${[0, 8, 16, 23][allocation.greenhouse]} Food`
-                        }
-                        canIncrement={allocation.greenhouse < 3 && usedPowerUnits < maxAllowedUnits}
-                        canDecrement={allocation.greenhouse > 0}
-                        onIncrement={() => adjustModulePower('greenhouse', 1)}
-                        onDecrement={() => adjustModulePower('greenhouse', -1)}
-                      />
-                      <PowerControlCard
-                        shortcut="3"
-                        title="Shield"
-                        level={allocation.shield}
-                        effectNote={`Blocks ${[10, 45, 78, 94][allocation.shield]}% rad`}
-                        canIncrement={allocation.shield < 3 && usedPowerUnits < maxAllowedUnits}
-                        canDecrement={allocation.shield > 0}
-                        onIncrement={() => adjustModulePower('shield', 1)}
-                        onDecrement={() => adjustModulePower('shield', -1)}
-                      />
-                      <PowerControlCard
-                        shortcut="4"
-                        title="Rover Lab"
-                        level={allocation.lab}
-                        effectNote={
-                          allocation.lab === 0
-                            ? 'Parked'
-                            : `+${(site === 'europa' ? [0, 12, 22, 30] : [0, 11, 20, 28])[allocation.lab]}% Sci · -${allocation.lab * 2} O₂`
-                        }
-                        canIncrement={allocation.lab < 3 && usedPowerUnits < maxAllowedUnits}
-                        canDecrement={allocation.lab > 0}
-                        onIncrement={() => adjustModulePower('lab', 1)}
-                        onDecrement={() => adjustModulePower('lab', -1)}
-                      />
+                    {/* 4 Compact Building Selector Tabs */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {MODULE_ORDER.map((key) => {
+                        const info = MODULE_INFO[key];
+                        const level = allocation[key];
+                        const active = selectedModule === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              setSelectedModule(key);
+                              triggerPulse(key);
+                            }}
+                            className={`min-h-[44px] px-1.5 py-1.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                              active
+                                ? 'bg-[#172542] border-amber-400 text-white'
+                                : 'bg-[#131C30] border-slate-700/80 text-slate-300 hover:border-slate-500'
+                            }`}
+                          >
+                            <span className="font-display font-bold text-xs leading-none">
+                              {info.shortName}
+                            </span>
+                            <span className="flex items-center gap-0.5" aria-hidden="true">
+                              {[1, 2, 3].map((pip) => (
+                                <span
+                                  key={pip}
+                                  className={`w-2 h-1.5 rounded-xs ${
+                                    level >= pip ? info.dotClass : 'bg-slate-700'
+                                  }`}
+                                />
+                              ))}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    <p className="text-[11px] leading-snug text-cyan-200 bg-[#121D33] border border-slate-700/80 rounded-lg px-2.5 py-1.5">
-                      {liveTradeOffHint}
-                    </p>
+                    {/* Single Focused Building Card (Only ONE - / + control visible!) */}
+                    <div className="rounded-xl bg-[#162033] border border-slate-700/90 p-2.5 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-display font-bold text-sm text-white truncate">
+                          {MODULE_INFO[selectedModule].name}
+                        </p>
+                        <p className="text-xs text-cyan-200 truncate mt-0.5">
+                          {getModuleEffectSummary(
+                            selectedModule,
+                            allocation[selectedModule],
+                            site,
+                            forecast.radiationMsv
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => adjustModulePower(selectedModule, -1)}
+                          disabled={allocation[selectedModule] <= 0}
+                          aria-label={`Decrease power for ${MODULE_INFO[selectedModule].name}`}
+                          className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed border border-slate-600 flex items-center justify-center text-white cursor-pointer"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="w-8 text-center font-mono font-bold text-sm tabular-nums text-amber-300">
+                          {allocation[selectedModule]}/3
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => adjustModulePower(selectedModule, 1)}
+                          disabled={
+                            allocation[selectedModule] >= 3 || usedPowerUnits >= maxAllowedUnits
+                          }
+                          aria-label={`Increase power for ${MODULE_INFO[selectedModule].name}`}
+                          className="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed border border-slate-600 flex items-center justify-center text-white cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
 
                     <button
                       type="button"
                       onClick={handleRunSolPower}
-                      className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
                     >
-                      <span>Run Sol {sol}</span>
+                      <span>Start Sol {sol}</span>
                       <ArrowRight className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </>
                 )}
 
+                {/* PHASE 3: CLEAN 2-OPTION TACTICAL DILEMMA */}
                 {phase === 'SOL_DILEMMA' && activeDilemma && (
                   <div className="space-y-2.5">
                     <div>
@@ -737,39 +903,55 @@ export default function App() {
                     </div>
 
                     <div className="space-y-2">
-                      {activeDilemma.options.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => handleResolveDilemma(opt)}
-                          className="w-full min-h-[52px] text-left p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E2C47] border border-slate-700 hover:border-amber-400 transition-colors flex flex-col justify-center gap-0.5 cursor-pointer"
-                        >
-                          <span className="font-display font-bold text-xs sm:text-sm text-white">
-                            {opt.label}
-                          </span>
-                          <span className="text-[11px] font-mono tabular-nums text-amber-300">
-                            {opt.tradeOffSummary}
-                          </span>
-                        </button>
-                      ))}
+                      {binaryOptions.map((opt) => {
+                        const chips = getDeltaChips(opt.deltas);
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleResolveDilemma(opt)}
+                            className="w-full min-h-[54px] text-left p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E2C47] border border-slate-700 hover:border-amber-400 transition-colors flex flex-col justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span className="font-display font-bold text-sm text-white leading-tight">
+                              {opt.label}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {chips.map((c) => (
+                                <span
+                                  key={c.label}
+                                  className={`text-[11px] font-mono font-semibold tabular-nums ${
+                                    c.positive ? 'text-emerald-300' : 'text-rose-300'
+                                  }`}
+                                >
+                                  {c.label}
+                                </span>
+                              ))}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
+                {/* PHASE 4: PUNCHY SOL RESULT */}
                 {phase === 'SOL_OUTCOME' && chosenOption && (
                   <div className="space-y-2.5">
-                    <div className="space-y-1">
-                      <p className="font-display font-bold text-sm text-emerald-300">
+                    <div className="space-y-1.5">
+                      <p className="font-display font-bold text-sm text-amber-300">
                         {chosenOption.label}
                       </p>
                       {solNetDeltas && (
-                        <p className="text-[11px] font-mono tabular-nums text-slate-300">
-                          Net: {formatDelta(solNetDeltas.power)} Pwr ·{' '}
-                          {formatDelta(solNetDeltas.oxygen)} O₂ ·{' '}
-                          {formatDelta(solNetDeltas.food)} Food ·{' '}
-                          {formatDelta(solNetDeltas.health)} Hlth ·{' '}
-                          {formatDelta(solNetDeltas.science)} Sci
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono font-semibold tabular-nums">
+                          {getDeltaChips(solNetDeltas).map((c) => (
+                            <span
+                              key={c.label}
+                              className={c.positive ? 'text-emerald-300' : 'text-rose-300'}
+                            >
+                              {c.label}
+                            </span>
+                          ))}
+                        </div>
                       )}
                       <p className="text-xs text-slate-200 leading-snug">
                         {chosenOption.outcomeStory}
@@ -787,9 +969,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleNextSol}
-                      className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
                     >
-                      <span>{sol >= TOTAL_SOLS ? 'Finish Mission' : `Start Sol ${sol + 1}`}</span>
+                      <span>{sol >= TOTAL_SOLS ? 'Finish Mission' : `Next: Sol ${sol + 1}`}</span>
                       <ArrowRight className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
@@ -841,7 +1023,10 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setScreen('TITLE_MENU')}
+                  onClick={() => {
+                    clearSimTimer();
+                    setScreen('TITLE_MENU');
+                  }}
                   className="min-h-[44px] w-full px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-sm cursor-pointer"
                 >
                   Return to Title Screen
@@ -875,108 +1060,40 @@ export default function App() {
 interface HudMeterProps {
   label: string;
   value: number;
-  previewDelta?: number;
   icon: React.ReactNode;
   barColor: string;
-  hideStatusWord?: boolean;
+  isGoal?: boolean;
 }
 
-function HudMeter({
-  label,
-  value,
-  previewDelta,
-  icon,
-  barColor,
-  hideStatusWord = false,
-}: HudMeterProps) {
-  const status = getResourceStatusLabel(value);
-  const statusColor =
-    status === 'CRITICAL'
-      ? 'text-rose-400'
-      : status === 'LOW'
-        ? 'text-amber-300'
-        : 'text-slate-400';
+function HudMeter({ label, value, icon, barColor, isGoal = false }: HudMeterProps) {
+  const isDanger = !isGoal && value <= 20;
 
   return (
-    <div className="flex flex-col gap-0.5 min-w-0">
+    <div
+      className={`flex flex-col gap-1 min-w-0 rounded-lg px-1.5 py-1 ${
+        isDanger ? 'bg-rose-950/70 border border-rose-500/70' : 'bg-[#0F182D]'
+      }`}
+    >
       <div className="flex items-center justify-between gap-0.5 text-[11px]">
         <span className="flex items-center gap-0.5 font-semibold text-slate-200 truncate">
           {icon}
           <span>{label}</span>
         </span>
-        <span className="font-mono font-bold tabular-nums text-white shrink-0">{value}%</span>
+        <span
+          className={`font-mono font-bold tabular-nums shrink-0 ${
+            isDanger ? 'text-rose-300' : 'text-white'
+          }`}
+        >
+          {value}%
+        </span>
       </div>
       <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
         <div
           className={`h-full w-full transition-transform duration-150 origin-left ${
-            !hideStatusWord && status === 'CRITICAL' ? 'bg-rose-500' : barColor
+            isDanger ? 'bg-rose-500' : barColor
           }`}
           style={{ transform: `scaleX(${Math.max(0, Math.min(1, value / 100))})` }}
         />
-      </div>
-      <div className="flex items-center justify-between text-[9px] font-mono tabular-nums leading-none pt-0.5">
-        {!hideStatusWord ? (
-          <span className={`font-semibold ${statusColor}`}>{status === 'CRITICAL' ? 'CRIT' : status}</span>
-        ) : (
-          <span className="text-slate-400">DATA</span>
-        )}
-        {previewDelta !== undefined && previewDelta !== 0 && (
-          <span className={previewDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}>
-            {formatDelta(previewDelta)}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface PowerControlCardProps {
-  shortcut: string;
-  title: string;
-  level: number;
-  effectNote: string;
-  canIncrement: boolean;
-  canDecrement: boolean;
-  onIncrement: () => void;
-  onDecrement: () => void;
-}
-
-function PowerControlCard({
-  title,
-  level,
-  effectNote,
-  canIncrement,
-  canDecrement,
-  onIncrement,
-  onDecrement,
-}: PowerControlCardProps) {
-  return (
-    <div className="rounded-xl bg-[#162033] border border-slate-700/80 p-2 flex flex-col justify-between gap-1.5">
-      <div className="flex items-center justify-between gap-1">
-        <span className="font-display font-bold text-xs text-white truncate">{title}</span>
-        <span className="text-[10px] text-slate-300 truncate">{effectNote}</span>
-      </div>
-
-      <div className="flex items-center justify-between gap-1.5">
-        <button
-          type="button"
-          onClick={onDecrement}
-          disabled={!canDecrement}
-          aria-label={`Decrease power for ${title}`}
-          className="min-w-[44px] min-h-[44px] rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed border border-slate-600 flex items-center justify-center text-slate-100 cursor-pointer"
-        >
-          <Minus className="w-3.5 h-3.5" />
-        </button>
-        <span className="font-mono font-bold text-sm tabular-nums text-amber-300">{level}/3</span>
-        <button
-          type="button"
-          onClick={onIncrement}
-          disabled={!canIncrement}
-          aria-label={`Increase power for ${title}`}
-          className="min-w-[44px] min-h-[44px] rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed border border-slate-600 flex items-center justify-center text-slate-100 cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
   );

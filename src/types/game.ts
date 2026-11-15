@@ -6,7 +6,7 @@ export type DifficultyMode = 'cadet' | 'commander';
 
 export type ModuleKey = 'scrubber' | 'greenhouse' | 'shield' | 'lab';
 
-export type SolPhase = 'ALLOCATE_POWER' | 'SOL_DILEMMA' | 'SOL_OUTCOME';
+export type SolPhase = 'ALLOCATE_POWER' | 'SIMULATING_SOL' | 'SOL_DILEMMA' | 'SOL_OUTCOME';
 
 export interface CoreResources {
   power: number; // 0 - 100
