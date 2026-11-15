@@ -14,8 +14,8 @@ export function getOpeningCutscene(weather: SpaceWeatherSnapshot): CutsceneShot[
       preset: 'intro_outpost',
       durationMs: 2600,
       speaker: 'Houston Control',
-      caption: 'Sol 214, Jezero Crater. Solar panels and domes are online.',
-      radioLine: 'Sol 214 at Jezero Crater. Solar panels and domes are online.',
+      caption: 'Day 1, Jezero Crater. Solar panels and domes are online.',
+      radioLine: 'Day 1 at Jezero Crater. Solar panels and domes are online.',
       mood: 'calm',
     },
     {
@@ -44,13 +44,13 @@ export function getChapterIntroCutscene(
         id: 'chap-215',
         preset: 'solar_arrays',
         durationMs: 2500,
-        speaker: `Houston Control · Sol ${displaySol}`,
+        speaker: `Houston Control · Day ${displaySol}`,
         caption: memory.retractedPanelsOn214
           ? 'Folded panels stayed clean, though batteries ran low overnight.'
           : 'Martian dust coated the solar panels overnight, cutting power.',
         radioLine: memory.retractedPanelsOn214
-          ? `Sol ${displaySol}. Folded panels stayed clean, though batteries ran low overnight.`
-          : `Sol ${displaySol}. Martian dust coated the solar panels overnight, cutting power.`,
+          ? `Day ${displaySol}. Folded panels stayed clean, though batteries ran low overnight.`
+          : `Day ${displaySol}. Martian dust coated the solar panels overnight, cutting power.`,
         mood: 'calm',
       },
     ];
@@ -62,7 +62,7 @@ export function getChapterIntroCutscene(
         id: 'chap-216',
         preset: 'shelter_water',
         durationMs: 2600,
-        speaker: `Space Weather Desk · Sol ${displaySol}`,
+        speaker: `Space Weather Desk · Day ${displaySol}`,
         caption: `${forecast.flareClass} solar radiation wave incoming! Shelter alarm active.`,
         radioLine: `${forecast.flareClass} solar radiation wave incoming! Shelter alarm is active.`,
         flareBoost: true,
@@ -77,7 +77,7 @@ export function getChapterIntroCutscene(
         id: 'chap-217',
         preset: 'comms_dish',
         durationMs: 2600,
-        speaker: `Deep Space Network · Sol ${displaySol}`,
+        speaker: `Deep Space Network · Day ${displaySol}`,
         caption: 'Greenhouse airlock leak! Radio takes 14 minutes—Earth cannot answer in time.',
         radioLine: 'Greenhouse airlock leak! Earth radio takes 14 minutes—you’re on your own!',
         commsBeamBoost: true,
@@ -92,9 +92,9 @@ export function getChapterIntroCutscene(
         id: 'chap-218',
         preset: 'farm_dome',
         durationMs: 2400,
-        speaker: `Houston Science · Sol ${displaySol}`,
+        speaker: `Houston Science · Day ${displaySol}`,
         caption: 'Greenhouse crops are ready to bloom under the grow lamps.',
-        radioLine: `Sol ${displaySol}. Greenhouse crops are ready to bloom.`,
+        radioLine: `Day ${displaySol}. Greenhouse crops are ready to bloom.`,
         mood: 'calm',
       },
     ];
@@ -106,9 +106,9 @@ export function getChapterIntroCutscene(
         id: 'chap-219',
         preset: 'rover_eva',
         durationMs: 2500,
-        speaker: `Houston Geology · Sol ${displaySol}`,
-        caption: 'Ancient riverbed rocks spotted outside. One more Sol until relief lands!',
-        radioLine: `Sol ${displaySol}. Ancient riverbed rocks spotted outside—one day till relief lands!`,
+        speaker: `Houston Geology · Day ${displaySol}`,
+        caption: 'Ancient riverbed rocks spotted outside. One more day until relief lands!',
+        radioLine: `Day ${displaySol}. Ancient riverbed rocks spotted outside—one day till relief lands!`,
         mood: 'calm',
       },
     ];
@@ -119,9 +119,9 @@ export function getChapterIntroCutscene(
       id: 'chap-220',
       preset: 'lander_descent',
       durationMs: 2800,
-      speaker: `Landing Control · Sol ${displaySol}`,
+      speaker: `Landing Control · Day ${displaySol}`,
       caption: 'Final day! Relief cargo lander descending toward Pad 1!',
-      radioLine: `Sol ${displaySol}, final day! Relief cargo lander descending toward Pad 1!`,
+      radioLine: `Day ${displaySol}, final day! Relief cargo lander descending toward Pad 1!`,
       landerDescending: true,
       dustBoost: true,
       mood: 'triumph',
@@ -132,15 +132,13 @@ export function getChapterIntroCutscene(
 export function getDilemmaRadioLine(
   solIndex: number,
   dilemma: DilemmaCard,
-  memory: StoryMemory
+  _memory: StoryMemory
 ): string {
   if (solIndex === 1) {
     return 'Ten seconds! Fold the solar panels to protect them, or leave them out for power?';
   }
   if (solIndex === 2) {
-    return memory.retractedPanelsOn214
-      ? 'Oxygen scrubber is cold. Spend battery to warm it, or route air through the greenhouse?'
-      : 'Dust is blocking the panels. Suit up outside to brush them clean, or stay inside and save air?';
+    return 'Oxygen scrubber is cold. Spend battery to warm it, or route air through the greenhouse?';
   }
   if (solIndex === 3) {
     return 'Ten seconds! Pump farm water into the walls to block radiation, or keep the rover scanning?';
@@ -152,7 +150,7 @@ export function getDilemmaRadioLine(
     return 'Blast grow lights for fresh food and air, or dim lights to save power and freeze samples?';
   }
   if (solIndex === 6) {
-    return 'Keep Maya indoors to rest before landing day, or send her outside for rock samples?';
+    return 'Keep indoors to rest before landing day, or send outside for rock samples?';
   }
   if (solIndex === 7) {
     return 'Final call! Cut lab power for a safe radar landing, or run full dust sensors during touchdown?';
@@ -174,7 +172,7 @@ export function getChoiceOutcomeCutscene(
         id: `out-${id}`,
         preset: 'solar_arrays',
         durationMs: 2400,
-        speaker: `Sol ${displaySol} · Control Link`,
+        speaker: `Day ${displaySol} · Control Link`,
         caption: option.retractPanels
           ? 'Solar wings folded flat before the storm hit. Running on battery tonight.'
           : 'Panels stayed open in the storm—power is up, but seals and health took a hit.',
@@ -195,7 +193,7 @@ export function getChoiceOutcomeCutscene(
         id: `out-${id}`,
         preset: brushedOutside ? 'rover_eva' : routedToFarm ? 'farm_dome' : 'o2_dome',
         durationMs: 2300,
-        speaker: `Sol ${displaySol} · Control Link`,
+        speaker: `Day ${displaySol} · Control Link`,
         caption: brushedOutside
           ? 'Dust brushed off the solar panels—power is climbing back.'
           : routedToFarm
@@ -217,7 +215,7 @@ export function getChoiceOutcomeCutscene(
         id: `out-${id}`,
         preset: id === 'flood-water-shield' ? 'shelter_water' : 'rover_eva',
         durationMs: 2400,
-        speaker: `Sol ${displaySol} · Control Link`,
+        speaker: `Day ${displaySol} · Control Link`,
         caption:
           id === 'flood-water-shield'
             ? 'Farm water fills the shelter walls, blocking incoming radiation.'
@@ -238,7 +236,7 @@ export function getChoiceOutcomeCutscene(
         id: `out-${id}`,
         preset: id === 'maya-acts-now' ? 'o2_dome' : 'comms_dish',
         durationMs: 2400,
-        speaker: `Sol ${displaySol} · Control Link`,
+        speaker: `Day ${displaySol} · Control Link`,
         caption:
           id === 'maya-acts-now'
             ? 'Hatch sealed and scrubbers boosted—cabin pressure holds!'
@@ -259,7 +257,7 @@ export function getChoiceOutcomeCutscene(
         id: `out-${id}`,
         preset: 'farm_dome',
         durationMs: 2300,
-        speaker: `Sol ${displaySol} · Control Link`,
+        speaker: `Day ${displaySol} · Control Link`,
         caption:
           id === 'full-grow-leds'
             ? 'Full grow-lights boost fresh food and extra oxygen.'
@@ -279,15 +277,15 @@ export function getChoiceOutcomeCutscene(
         id: `out-${id}`,
         preset: id === 'rest-and-eat-indoors' ? 'o2_dome' : 'rover_eva',
         durationMs: 2300,
-        speaker: `Sol ${displaySol} · Control Link`,
+        speaker: `Day ${displaySol} · Control Link`,
         caption:
           id === 'rest-and-eat-indoors'
-            ? 'Maya rests inside with a warm meal—health recovers.'
-            : 'Maya and the rover drill ancient Jezero rock samples outside.',
+            ? 'Rested inside with a warm meal—health recovers.'
+            : 'Drilled ancient Jezero rock samples outside.',
         radioLine:
           id === 'rest-and-eat-indoors'
-            ? 'Maya is resting inside—crew health is bouncing back.'
-            : 'Maya and the rover are drilling ancient rock samples now.',
+            ? 'Resting inside—crew health is bouncing back.'
+            : 'Drilling ancient rock samples now.',
         mood: 'calm',
       },
     ];
@@ -298,7 +296,7 @@ export function getChoiceOutcomeCutscene(
       id: `out-${id}`,
       preset: 'lander_descent',
       durationMs: 2600,
-      speaker: `Touchdown · Sol ${displaySol}`,
+      speaker: `Touchdown · Day ${displaySol}`,
       caption: 'Touchdown on Pad 1! Relief supplies have arrived safely.',
       radioLine: 'Touchdown on Pad 1! Relief lander is down safe!',
       landerDescending: true,
@@ -315,8 +313,8 @@ export function getVictoryCutscene(): CutsceneShot[] {
       preset: 'victory_celebration',
       durationMs: 2800,
       speaker: 'Houston Flight · Mission Accomplished',
-      caption: 'Seven Martian sols survived! Welcome the relief crew, Cadet!',
-      radioLine: 'Seven sols survived at Jezero Crater. Mission accomplished, Cadet!',
+      caption: 'Seven Martian days survived! Welcome the relief crew, Cadet!',
+      radioLine: 'Seven Martian days survived at Jezero Crater. Mission accomplished, Cadet!',
       mood: 'triumph',
     },
   ];

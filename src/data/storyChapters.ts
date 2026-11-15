@@ -1,6 +1,6 @@
 import type { DilemmaCard, OutpostSite, SolForecast, SpaceWeatherSnapshot } from '../types/game';
 
-export const MISSION_START_SOL = 214;
+export const MISSION_START_SOL = 1;
 
 export interface StoryMemory {
   retractedPanelsOn214: boolean;
@@ -25,28 +25,28 @@ export function getAstronautBrief(
   const displaySol = MISSION_START_SOL + solIndex - 1;
 
   if (solIndex === 1) {
-    return `Sol ${displaySol}. I'm Commander Maya on solo watch in Jezero Crater. Route ${forecast.solarBudget} solar bars before dark—dust clouds are building.`;
+    return `Day ${displaySol}. I'm Commander on solo watch in Jezero Crater. Route ${forecast.solarBudget} solar bars before dark—dust clouds are building.`;
   }
   if (solIndex === 2) {
     return memory.retractedPanelsOn214
-      ? `Sol ${displaySol}. Retracting our solar wings saved the hinges, though our Mars battery bank is low. Help me balance air and power.`
-      : `Sol ${displaySol}. Leaving the panels out powered last night, but Martian grit jammed the joints. Let's nurse our power budget.`;
+      ? `Day ${displaySol}. Retracting our solar wings saved the hinges, though our Mars battery bank is low. Help me balance air and power.`
+      : `Day ${displaySol}. Leaving the panels out powered last night, but Martian grit jammed the joints. Let's nurse our power budget.`;
   }
   if (solIndex === 3) {
     return forecast.radiationMsv >= 18
-      ? `Sol ${displaySol}. NASA DONKI just flashed a ${forecast.flareClass} flare alert! Check our Radiation Shelter before running the base.`
-      : `Sol ${displaySol}. Radiation sensors are rising across Jezero Crater. Let's protect crew health without starving the farm.`;
+      ? `Day ${displaySol}. NASA DONKI just flashed a ${forecast.flareClass} flare alert! Check our Radiation Shelter before running the base.`
+      : `Day ${displaySol}. Radiation sensors are rising across Jezero Crater. Let's protect crew health without starving the farm.`;
   }
   if (solIndex === 4) {
-    return `Sol ${displaySol}. Earth is 130M km away today (14 min radio lag). Keep life support steady for field checks.`;
+    return `Day ${displaySol}. Earth is 130M km away today (14 min radio lag). Keep life support steady for field checks.`;
   }
   if (solIndex === 5) {
-    return `Sol ${displaySol}. Equipment strain is piling up across the tunnels. Every watt has to count today.`;
+    return `Day ${displaySol}. Equipment strain is piling up across the tunnels. Every watt has to count today.`;
   }
   if (solIndex === 6) {
-    return `Sol ${displaySol}. One more Sol until the supply craft arrives. Keep Oxygen and Crew Health in the green!`;
+    return `Day ${displaySol}. One more day until the supply craft arrives. Keep Oxygen and Crew Health in the green!`;
   }
-  return `Sol ${displaySol}. Final descent day! Hold our outpost steady until the supply lander touches down on Pad 1.`;
+  return `Day ${displaySol}. Final descent day! Hold our outpost steady until the supply lander touches down on Pad 1.`;
 }
 
 export function buildStoryChapterDilemma(
@@ -62,11 +62,11 @@ export function buildStoryChapterDilemma(
       ? `Live NOAA/NASA feed (${weather.latestFlareClass}, ${weather.solarWindSpeedKms} km/s)`
       : `NASA DONKI archive (${weather.latestFlareClass}, ${weather.solarWindSpeedKms} km/s)`;
 
-  // CHAPTER 1 (Sol 214): Iconic 10-Second Mars Dust Storm Panel Decision
+  // CHAPTER 1 (Day 1): Iconic 10-Second Mars Dust Storm Panel Decision
   if (solIndex === 1) {
     return {
       id: 'story-sol214-storm',
-      title: `Sol ${displaySol}: 10 Seconds to Save the Arrays!`,
+      title: `Day ${displaySol}: 10 Seconds to Save the Arrays!`,
       category: 'Solar Weather',
       siteFilter: site,
       urgentSeconds: 10,
@@ -110,13 +110,13 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 2 (Sol 215): Consequence Ripple from Sol 214
+  // CHAPTER 2 (Day 2): Consequence Ripple from Day 1
   if (solIndex === 2) {
     return {
       id: 'story-sol215-aftermath',
       title: memory.retractedPanelsOn214
-        ? `Sol ${displaySol}: Deep Battery Chill`
-        : `Sol ${displaySol}: Sandblasted Array Joints`,
+        ? `Day ${displaySol}: Deep Battery Chill`
+        : `Day ${displaySol}: Sandblasted Array Joints`,
       category: 'Life Support',
       siteFilter: site,
       briefing: memory.retractedPanelsOn214
@@ -170,11 +170,11 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 3 (Sol 216): Real NASA DONKI Solar Activity Radiation Crisis
+  // CHAPTER 3 (Day 3): Real NASA DONKI Solar Activity Radiation Crisis
   if (solIndex === 3) {
     return {
       id: 'story-sol216-donki-flare',
-      title: `Sol ${displaySol}: ${forecast.flareClass} Solar Proton Surge`,
+      title: `Day ${displaySol}: ${forecast.flareClass} Solar Proton Surge`,
       category: 'Solar Weather',
       siteFilter: site,
       urgentSeconds: 10,
@@ -213,13 +213,13 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 4 (Sol 217): 14-Minute Light-Time Delay Emergency (Zero Earth Help!)
+  // CHAPTER 4 (Day 4): 14-Minute Light-Time Delay Emergency (Zero Earth Help!)
   if (solIndex === 4) {
     const delayDesc = '14 minutes round-trip! Earth cannot hear your SOS in time.';
 
     return {
       id: 'story-sol217-comms-leak',
-      title: `Sol ${displaySol}: Airlock Gasket Leak!`,
+      title: `Day ${displaySol}: Airlock Gasket Leak!`,
       category: 'Comms Delay',
       siteFilter: site,
       requiresCommsDelay: true,
@@ -260,11 +260,11 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 5 (Sol 218): Biology & Food vs. Power / Science (NASA OSDR)
+  // CHAPTER 5 (Day 5): Biology & Food vs. Power / Science (NASA OSDR)
   if (solIndex === 5) {
     return {
       id: 'story-sol218-osdr-harvest',
-      title: `Sol ${displaySol}: Greenhouse Flowering Window`,
+      title: `Day ${displaySol}: Greenhouse Flowering Window`,
       category: 'Biology & Food',
       siteFilter: site,
       briefing:
@@ -303,11 +303,11 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 6 (Sol 219): Solo EVA vs. Indoor Recovery
+  // CHAPTER 6 (Day 6): Solo EVA vs. Indoor Recovery
   if (solIndex === 6) {
     return {
       id: 'story-sol219-eva-choice',
-      title: `Sol ${displaySol}: Core Sample vs. Crew Stamina`,
+      title: `Day ${displaySol}: Core Sample vs. Crew Stamina`,
       category: 'Rover Science',
       siteFilter: site,
       briefing:
@@ -346,10 +346,10 @@ export function buildStoryChapterDilemma(
     };
   }
 
-  // CHAPTER 7 (Sol 220): Supply Lander Descent Finale!
+  // CHAPTER 7 (Day 7): Supply Lander Descent Finale!
   return {
     id: 'story-sol220-lander-finale',
-    title: `Sol ${displaySol}: Supply Lander Descent on Pad 1!`,
+    title: `Day ${displaySol}: Supply Lander Descent on Pad 1!`,
     category: 'Comms Delay',
     siteFilter: site,
     briefing:

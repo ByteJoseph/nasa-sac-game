@@ -84,7 +84,7 @@ export function TitleScreen({
             </p>
           </div>
           <span className="font-mono text-[11px] font-bold text-amber-300 shrink-0">
-            Sol 214–220
+            Day 1–7
           </span>
         </div>
 

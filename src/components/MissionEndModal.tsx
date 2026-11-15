@@ -56,7 +56,7 @@ export function MissionEndModal({
               <span className="mx-2" aria-hidden="true">
                 ·
               </span>
-              Commander {commanderName} · Sol {214 + solReached - 1}
+              Commander {commanderName} · Day {solReached}
             </p>
             <h2 className="font-display font-extrabold text-2xl text-white mt-0.5">
               {victory ? `Story Complete: ${rankInfo.rank}` : 'Outpost Emergency Abort'}
@@ -85,7 +85,7 @@ export function MissionEndModal({
           ))}
         </div>
 
-        {/* Sol-by-Sol Trade-Off & Constraint Takeaways */}
+        {/* Day-by-Day Trade-Off & Constraint Takeaways */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           <div className="rounded-xl bg-[#14223B] border border-cyan-500/30 p-3.5 space-y-1.5">
             <h3 className="font-display font-bold text-xs text-cyan-300">
@@ -99,10 +99,10 @@ export function MissionEndModal({
           </div>
 
           <h3 className="text-xs font-semibold text-slate-400">
-            Mission Trade-Off Log ({logs.length} Sols Logged)
+            Mission Trade-Off Log ({logs.length} Days Logged)
           </h3>
           {logs.length === 0 ? (
-            <p className="text-sm text-slate-400">No full Sols completed yet.</p>
+            <p className="text-sm text-slate-400">No full Days completed yet.</p>
           ) : (
             logs.map((entry) => (
               <div
@@ -111,7 +111,7 @@ export function MissionEndModal({
               >
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="font-display font-bold text-amber-300">
-                    Sol {entry.sol}: {entry.dilemmaTitle}
+                    Day {entry.sol}: {entry.dilemmaTitle}
                   </span>
                   <span className="text-slate-400">{entry.forecastTitle}</span>
                 </div>

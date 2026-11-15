@@ -813,7 +813,7 @@ export default function App() {
                   ·
                 </span>
                 <span className="font-mono font-bold text-amber-300 tabular-nums shrink-0">
-                  Sol {displaySol}
+                  Day {displaySol}
                 </span>
               </div>
 
@@ -920,7 +920,7 @@ export default function App() {
             {phase === 'SIMULATING_SOL' ? (
               <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 px-4 py-3 shadow-2xl space-y-2">
                 <p className="text-xs font-semibold text-amber-300 text-center">
-                  Commander {commanderName} is running Sol {displaySol}...
+                  Commander {commanderName} is running Day {displaySol}...
                 </p>
                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full bg-amber-400 rounded-full w-full transition-transform duration-1000 origin-left" />
@@ -1058,7 +1058,7 @@ export default function App() {
                   <div className="pt-1.5 border-t border-slate-800 space-y-1.5">
                     <div className="flex items-center justify-between gap-2 text-[11px]">
                       <span className="text-slate-300 truncate">
-                        <strong className="text-amber-300">Sol {displaySol + 1}:</strong>{' '}
+                        <strong className="text-amber-300">Day {displaySol + 1}:</strong>{' '}
                         {nextSolForecast.radiationMsv >= 18
                           ? 'Solar Storm! Tap Shield'
                           : nextSolForecast.dustStormActive
@@ -1124,7 +1124,7 @@ export default function App() {
                   onClick={handleNextSol}
                   className="w-full min-h-[46px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  <span>{sol >= TOTAL_SOLS ? 'Finish Story' : `Next: Sol ${displaySol + 1}`}</span>
+                  <span>{sol >= TOTAL_SOLS ? 'Finish Story' : `Next: Day ${displaySol + 1}`}</span>
                   <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
@@ -1144,7 +1144,7 @@ export default function App() {
               <div>
                 <h2 className="font-display font-bold text-xl text-white">Mission Paused</h2>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  {siteProfile.name} · Sol {displaySol}
+                  {siteProfile.name} · Day {displaySol}
                 </p>
               </div>
               <div className="flex flex-col gap-2">
@@ -1162,7 +1162,7 @@ export default function App() {
                   className="min-h-[44px] w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                  <span>Restart Sol 214</span>
+                  <span>Restart Day 1</span>
                 </button>
                 <button
                   type="button"
