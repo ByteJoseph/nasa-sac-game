@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
-  BookOpen,
   Clock,
   FlaskConical,
   Pause,
@@ -18,7 +17,6 @@ import {
 import { CutsceneOverlay } from './components/CutsceneOverlay';
 import { GlossaryTerm } from './components/GlossaryTerm';
 import { MissionEndModal } from './components/MissionEndModal';
-import { NasaGuideModal } from './components/NasaGuideModal';
 import { OutpostCanvas3D, type PulseEvent } from './components/OutpostCanvas3D';
 import { TitleScreen } from './components/TitleScreen';
 import {
@@ -45,7 +43,6 @@ import {
 import type {
   CoreResources,
   CutsceneShot,
-  DifficultyMode,
   DilemmaCard,
   DilemmaOption,
   GameScreen,
@@ -179,9 +176,8 @@ const ZERO_DELTAS: ResourceDeltas = {
 export default function App() {
   const [screen, setScreen] = useState<GameScreen>('TITLE_MENU');
   const site: OutpostSite = 'mars';
-  const [difficulty, setDifficulty] = useState<DifficultyMode>('cadet');
+  const [commanderName, setCommanderName] = useState('Maya');
   const [weather, setWeather] = useState<SpaceWeatherSnapshot>(DEFAULT_WEATHER);
-  const [guideOpen, setGuideOpen] = useState(false);
   const [muted, setMuted] = useState(false);
 
   // Active Story State
@@ -248,16 +244,16 @@ export default function App() {
   }, []);
 
   const forecast = useMemo(
-    () => buildSolForecast(sol, site, difficulty, weather),
-    [sol, site, difficulty, weather]
+    () => buildSolForecast(sol, site, 'cadet', weather),
+    [sol, site, weather]
   );
 
   const nextSolForecast = useMemo(
     () =>
       sol < TOTAL_SOLS
-        ? buildSolForecast(sol + 1, site, difficulty, weather)
+        ? buildSolForecast(sol + 1, site, 'cadet', weather)
         : forecast,
-    [sol, site, difficulty, weather, forecast]
+    [sol, site, weather, forecast]
   );
 
   const activeBudgetForecast = phase === 'SOL_OUTCOME' ? nextSolForecast : forecast;
@@ -332,7 +328,6 @@ export default function App() {
       return;
     }
 
-    // 'intro' or 'chapter' transitions directly into the Sol's Dilemma (with 10s timer if urgent!)
     setUrgentSecondsLeft(urgent);
     setPhase('SOL_DILEMMA');
     soundEngine.playDilemmaAlert(Boolean(urgent));
@@ -366,9 +361,8 @@ export default function App() {
     });
   }, [sol, activeDilemma, storyMemory]);
 
-  // Play Control Center Radio + wait for both minimum visual shot time and radio explanation
   useEffect(() => {
-    if (screen !== 'PLAYING' || phase !== 'CUTSCENE' || !activeCutsceneShot || guideOpen) {
+    if (screen !== 'PLAYING' || phase !== 'CUTSCENE' || !activeCutsceneShot) {
       return;
     }
     let minDone = false;
@@ -418,13 +412,11 @@ export default function App() {
     activeDilemma,
     sol,
     storyMemory,
-    guideOpen,
     advanceCutsceneShot,
   ]);
 
-  // Explain each Sol's dilemma scenario over Control Center Radio when opened
   useEffect(() => {
-    if (screen !== 'PLAYING' || phase !== 'SOL_DILEMMA' || !activeDilemma || guideOpen) {
+    if (screen !== 'PLAYING' || phase !== 'SOL_DILEMMA' || !activeDilemma) {
       return;
     }
     radioVoice.speak(getDilemmaRadioLine(sol, activeDilemma, storyMemory), {
@@ -433,15 +425,16 @@ export default function App() {
     return () => {
       radioVoice.stop(false);
     };
-  }, [screen, phase, activeDilemma, sol, storyMemory, guideOpen]);
+  }, [screen, phase, activeDilemma, sol, storyMemory]);
 
   const startMission = useCallback(
-    (overrideSite?: OutpostSite, overrideDiff?: DifficultyMode) => {
+    (customName?: string) => {
       clearSimTimer();
       radioVoice.unlock();
-      const targetSite = overrideSite ?? site;
-      const targetDiff = overrideDiff ?? difficulty;
-      const initialForecast = buildSolForecast(1, targetSite, targetDiff, weather);
+      const finalName = customName?.trim() || commanderName || 'Maya';
+      setCommanderName(finalName);
+      const targetSite = site;
+      const initialForecast = buildSolForecast(1, targetSite, 'cadet', weather);
       const firstChapter = buildStoryChapterDilemma(
         1,
         targetSite,
@@ -454,7 +447,7 @@ export default function App() {
       setSelectedModule('scrubber');
       setPanelsRetracted(false);
       setStoryMemory(INITIAL_STORY_MEMORY);
-      setResources(getInitialResources(targetSite, targetDiff));
+      setResources(getInitialResources(targetSite, 'cadet'));
       setAllocation({
         scrubber: 2,
         greenhouse: 1,
@@ -477,7 +470,7 @@ export default function App() {
       ]);
       startCutscene(openingShots, 'intro', firstChapter.urgentSeconds ?? null);
     },
-    [site, difficulty, weather, clearSimTimer, startCutscene]
+    [site, weather, commanderName, clearSimTimer, startCutscene]
   );
 
   const adjustModulePower = useCallback(
@@ -520,13 +513,13 @@ export default function App() {
 
   const checkFailure = useCallback((nextRes: CoreResources): string | null => {
     if (nextRes.health <= 0) {
-      return 'Commander Maya’s health dropped to 0%. Mission Control ordered an emergency evacuation.';
+      return `Commander ${commanderName}’s health dropped to 0%. Mission Control ordered an emergency evacuation.`;
     }
     if (nextRes.oxygen <= 0 && nextRes.power <= 0) {
-      return 'Both Power and Air hit 0%, forcing Maya into an emergency capsule abort.';
+      return `Both Power and Air hit 0%, forcing ${commanderName} into an emergency capsule abort.`;
     }
     return null;
-  }, []);
+  }, [commanderName]);
 
   const handleResolveDilemma = useCallback(
     (option: DilemmaOption, timedOut = false) => {
@@ -601,14 +594,12 @@ export default function App() {
     ]
   );
 
-  // 10-Second Urgent Storm Countdown
   useEffect(() => {
     if (
       screen !== 'PLAYING' ||
       phase !== 'SOL_DILEMMA' ||
       urgentSecondsLeft === null ||
-      !activeDilemma ||
-      guideOpen
+      !activeDilemma
     ) {
       return;
     }
@@ -627,7 +618,7 @@ export default function App() {
     }, 1000);
 
     return () => window.clearTimeout(id);
-  }, [screen, phase, urgentSecondsLeft, activeDilemma, guideOpen, handleResolveDilemma]);
+  }, [screen, phase, urgentSecondsLeft, activeDilemma, handleResolveDilemma]);
 
   const handleNextSol = useCallback(() => {
     if (phase !== 'SOL_OUTCOME' || screen !== 'PLAYING') return;
@@ -638,7 +629,7 @@ export default function App() {
     }
 
     const nextSol = sol + 1;
-    const nextForecast = buildSolForecast(nextSol, site, difficulty, weather);
+    const nextForecast = buildSolForecast(nextSol, site, 'cadet', weather);
     const nextMaxUnits = nextForecast.solarBudget + (resources.power >= 20 ? 2 : 0);
     const nextAlloc = { ...allocation };
     while (getModuleUsedPower(nextAlloc) > nextMaxUnits) {
@@ -649,7 +640,7 @@ export default function App() {
       else break;
     }
 
-    const powerDeltas = calculatePowerAllocationDeltas(nextAlloc, nextForecast, site, difficulty);
+    const powerDeltas = calculatePowerAllocationDeltas(nextAlloc, nextForecast, site, 'cadet');
     const { next, secondaryNotes } = applyDeltas(resources, powerDeltas);
 
     setSol(nextSol);
@@ -698,7 +689,6 @@ export default function App() {
     screen,
     sol,
     site,
-    difficulty,
     weather,
     resources,
     allocation,
@@ -708,7 +698,6 @@ export default function App() {
     startCutscene,
   ]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -718,16 +707,13 @@ export default function App() {
         return;
       }
       if (e.key === 'Escape') {
-        if (guideOpen) {
-          setGuideOpen(false);
-        } else if (screen === 'PLAYING') {
+        if (screen === 'PLAYING') {
           setScreen('PAUSED');
         } else if (screen === 'PAUSED') {
           setScreen('PLAYING');
         }
         return;
       }
-      if (guideOpen) return;
 
       if (screen === 'TITLE_MENU' && (e.key === 'Enter' || e.key === ' ')) {
         e.preventDefault();
@@ -760,7 +746,6 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    guideOpen,
     screen,
     phase,
     selectedModule,
@@ -822,7 +807,7 @@ export default function App() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 min-w-0 text-xs">
                 <span className="font-display font-bold text-white truncate">
-                  Jezero · Mars
+                  Jezero · {commanderName}
                 </span>
                 <span className="text-slate-400" aria-hidden="true">
                   ·
@@ -833,15 +818,6 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setGuideOpen(true)}
-                  className="min-h-[36px] px-2.5 rounded-lg bg-[#0F172A]/90 hover:bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-100 flex items-center gap-1 cursor-pointer"
-                  aria-label="Open NASA Science Guide"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                  <span>Guide</span>
-                </button>
                 <button
                   type="button"
                   onClick={toggleMute}
@@ -900,12 +876,9 @@ export default function App() {
         {/* Title Screen Overlay */}
         {screen === 'TITLE_MENU' && (
           <TitleScreen
-            difficulty={difficulty}
             weather={weather}
             muted={muted}
-            onSelectDifficulty={setDifficulty}
-            onStart={() => startMission()}
-            onOpenGuide={() => setGuideOpen(true)}
+            onStart={(name) => startMission(name)}
             onToggleMute={toggleMute}
           />
         )}
@@ -947,7 +920,7 @@ export default function App() {
             {phase === 'SIMULATING_SOL' ? (
               <div className="rounded-2xl bg-[#0F172A]/95 border border-slate-700/90 px-4 py-3 shadow-2xl space-y-2">
                 <p className="text-xs font-semibold text-amber-300 text-center">
-                  Maya is running Sol {displaySol}...
+                  Commander {commanderName} is running Sol {displaySol}...
                 </p>
                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full bg-amber-400 rounded-full w-full transition-transform duration-1000 origin-left" />
@@ -1185,15 +1158,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGuideOpen(true)}
-                  className="min-h-[44px] w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <BookOpen className="w-4 h-4 text-amber-400" aria-hidden="true" />
-                  <span>NASA Data &amp; Guide</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startMission()}
+                  onClick={() => startMission(commanderName)}
                   className="min-h-[44px] w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" aria-hidden="true" />
@@ -1221,15 +1186,13 @@ export default function App() {
             failureReason={failureReason}
             site={site}
             solReached={sol}
+            commanderName={commanderName}
             resources={resources}
             logs={logs}
-            onPlayAgain={() => startMission()}
+            onPlayAgain={() => startMission(commanderName)}
             onChangeSite={() => setScreen('TITLE_MENU')}
-            onOpenGuide={() => setGuideOpen(true)}
           />
         )}
-
-        <NasaGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} weather={weather} />
       </div>
     </div>
   );
